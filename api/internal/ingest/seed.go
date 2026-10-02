@@ -92,6 +92,34 @@ func DataDoNome(nome string) string {
 	return ""
 }
 
+// reDataDigitada casa SÓ o prefixo que alguém escreveu à mão: "29-09-26" ou
+// "07-07-2026" no começo do nome.
+var reDataDigitada = regexp.MustCompile(`^(\d{2})-(\d{2})-(\d{2}(?:\d{2})?)\b`)
+
+// DataDigitadaNoNome extrai apenas a data TECLADA no começo do arquivo.
+//
+// Diferente de `DataDoNome`, que devolve a melhor data disponível: aqui quero
+// a pior de propósito. O nome dos PDFs do Gemini traz duas datas — a digitada
+// no começo e o carimbo da ferramenta no fim ("2026_09_25 11_00 GMT-03_00").
+// `DataDoNome` prefere o carimbo, que é confiável, e com isso a divergência
+// some: comparar carimbo com conteúdo dá sempre igual.
+//
+// É exatamente o caso real que ficou pendente: um arquivo nomeado 29/09 para
+// uma conversa de 25/09. Quem procura a 1:1 pela data do arquivo não acha, e a
+// contagem de 1:1s do ciclo sai errada. Para flagrar isso é a data digitada
+// que precisa ser confrontada com a do conteúdo.
+func DataDigitadaNoNome(nome string) string {
+	m := reDataDigitada.FindStringSubmatch(nome)
+	if m == nil {
+		return ""
+	}
+	ano := m[3]
+	if len(ano) == 2 {
+		ano = "20" + ano
+	}
+	return ano + "-" + m[2] + "-" + m[1]
+}
+
 var ignorar = []string{".claude", "node_modules", ".git", "~$"}
 
 // Seed varre a pasta e registra cada arquivo em source_files.

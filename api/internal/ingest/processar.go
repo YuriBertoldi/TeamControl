@@ -39,6 +39,8 @@ type RelProcessamento struct {
 	Abertas         int
 	Defesas         int
 	Transcricoes    int
+	Notas           int
+	Etapas          int
 	Linhas          int
 	Aliases         int
 	Revisao         []string
@@ -55,6 +57,8 @@ func (r RelProcessamento) Resumo() string {
 	fmt.Fprintf(&b, "  avaliações 1:1    %d\n", r.Avaliacoes)
 	fmt.Fprintf(&b, "  avaliações AVD    %d (%d notas, %d abertas)\n", r.Abertas/2, r.Drivers, r.Abertas)
 	fmt.Fprintf(&b, "  defesas           %d\n", r.Defesas)
+	fmt.Fprintf(&b, "  transcrições      %d (%d falas)\n", r.Transcricoes, r.Linhas)
+	fmt.Fprintf(&b, "  notas do Gemini   %d (%d próximas etapas no texto)\n", r.Notas, r.Etapas)
 	fmt.Fprintf(&b, "  aliases criados   %d\n", r.Aliases)
 	for _, m := range r.Revisao {
 		fmt.Fprintf(&b, "  revisão manual: %s\n", m)
@@ -75,10 +79,199 @@ func Processar(db *sql.DB, tenantID int64, raiz, coordenador string) (RelProcess
 	if err := processarTranscricoes(db, tenantID, raiz, coordenador, &rel); err != nil {
 		return rel, err
 	}
+	if err := processarPDFs(db, tenantID, raiz, coordenador, &rel); err != nil {
+		return rel, err
+	}
 	if err := processarAVD(db, tenantID, raiz, &rel); err != nil {
 		return rel, err
 	}
 	return rel, nil
+}
+
+/* ---------- PDFs do Gemini ---------- */
+
+// processarPDFs lê as anotações e as transcrições em PDF.
+//
+// Sobre os encaminhamentos: as anotações trazem uma seção "Próximas etapas"
+// pronta, e seria fácil virar action item. NÃO vira, de propósito. O registro
+// `.md` é a versão CURADA da mesma conversa, e é de lá que os encaminhamentos
+// saem. Gravar os dois produziria board com a tarefa duplicada — uma escrita
+// por você, outra gerada pela ferramenta — e você teria de conciliar as duas
+// toda semana. As etapas ficam no texto da fonte, pesquisáveis; promovê-las a
+// compromisso é decisão da curadoria do pós-1:1, não da carga.
+func processarPDFs(db *sql.DB, tenantID int64, raiz, coordenador string,
+	rel *RelProcessamento) error {
+
+	var arquivos []string
+	_ = filepath.Walk(raiz, func(p string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !strings.EqualFold(filepath.Ext(p), ".pdf") {
+			return nil
+		}
+		arquivos = append(arquivos, p)
+		return nil
+	})
+	sort.Strings(arquivos)
+	if len(arquivos) == 0 {
+		return nil
+	}
+
+	if !PdftotextDisponivel() {
+		rel.Revisao = append(rel.Revisao, fmt.Sprintf(
+			"%d PDFs não processados: pdftotext ausente no PATH (pacote poppler-utils)",
+			len(arquivos)))
+		return nil
+	}
+
+	for _, caminho := range arquivos {
+		nome := filepath.Base(caminho)
+
+		notas := strings.Contains(nome, "Anotações do Gemini")
+		transcricao := strings.Contains(nome, "Transcript")
+		if !notas && !transcricao {
+			continue // material de apoio da AVD e afins — já ignorados no catálogo
+		}
+
+		texto, extrator, err := ExtrairTextoPDF(caminho)
+		if err != nil {
+			rel.Erros = append(rel.Erros, fmt.Sprintf("%s: %v", nome, err))
+			marcarArquivo(db, tenantID, nome, "erro", err.Error())
+			continue
+		}
+		qualidade, motivo := QualidadeExtracao(texto)
+		if qualidade == "falhou" {
+			rel.Revisao = append(rel.Revisao, fmt.Sprintf("%s: %s", nome, motivo))
+			marcarArquivo(db, tenantID, nome, "revisao_manual", motivo)
+			continue
+		}
+
+		if transcricao {
+			err = gravarPDFTranscricao(db, tenantID, nome, texto, extrator,
+				qualidade, coordenador, rel)
+		} else {
+			err = gravarPDFNotas(db, tenantID, nome, texto, extrator, qualidade, rel)
+		}
+		if err != nil {
+			rel.Revisao = append(rel.Revisao, fmt.Sprintf("%s: %v", nome, err))
+			marcarArquivo(db, tenantID, nome, "revisao_manual", err.Error())
+			continue
+		}
+		marcarArquivo(db, tenantID, nome, "processado", "")
+	}
+	return nil
+}
+
+func gravarPDFNotas(db *sql.DB, tenantID int64, arquivo, texto, extrator,
+	qualidade string, rel *RelProcessamento) error {
+
+	n, err := ParseGeminiNotas(texto)
+	if err != nil {
+		return err
+	}
+	m, err := ResolverPessoa(db, tenantID, n.Participante)
+	if err != nil {
+		return err
+	}
+	if m == nil {
+		return fmt.Errorf("não resolvi %q", n.Participante)
+	}
+	if m.Como != "exata" {
+		if err := GravarAlias(db, tenantID, m.PersonID, n.Participante, "arquivo"); err == nil {
+			rel.Aliases++
+		}
+	}
+
+	// A data do CONTEÚDO, impressa pelo Gemini no corpo, é a que vale. A do
+	// nome é digitada e erra — este é exatamente o caso que estava pendente:
+	// até agora a divergência só era checada nos .txt do Tactiq, então um PDF
+	// com nome errado entrava com a data errada e ninguém via.
+	data := n.DataConteudo
+	if data == "" {
+		return fmt.Errorf("sem data no corpo das anotações")
+	}
+	// A comparação é contra a data DIGITADA no começo do nome, não contra o
+	// carimbo do Gemini. O carimbo é gerado pela ferramenta e bate sempre com
+	// o conteúdo; confrontá-lo não acusaria nada. Quem erra é quem digita.
+	dataArquivo := DataDigitadaNoNome(arquivo)
+	divergente := dataArquivo != "" && dataArquivo != data
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var meetingID int64
+	err = tx.QueryRow(`
+		INSERT INTO meetings (tenant_id, person_id, tipo, data, data_arquivo, tem_divergencia_data)
+		VALUES ($1,$2,'one_on_one',$3,NULLIF($4,'')::date,$5)
+		ON CONFLICT (tenant_id, person_id, data, tipo) DO UPDATE SET
+		  -- Quando diverge, a data do nome que vale guardar é a ERRADA: é ela
+		  -- que precisa ser corrigida no arquivo, e uma coluna de auditoria que
+		  -- mostra o valor certo não serve para auditar nada.
+		  data_arquivo = CASE WHEN EXCLUDED.tem_divergencia_data
+		                      THEN EXCLUDED.data_arquivo
+		                      ELSE COALESCE(meetings.data_arquivo, EXCLUDED.data_arquivo) END,
+		  tem_divergencia_data = meetings.tem_divergencia_data OR EXCLUDED.tem_divergencia_data
+		RETURNING id`,
+		tenantID, m.PersonID, data, dataArquivo, divergente).Scan(&meetingID)
+	if err != nil {
+		return fmt.Errorf("reunião: %w", err)
+	}
+
+	soma := sha256.Sum256([]byte(texto))
+	// Confidencialidade 3, e não negociável: as anotações trazem o que o
+	// registro compartilhável deliberadamente OMITIU — remuneração, projeção
+	// de carreira não confirmada, comentário sobre terceiros. Classificar como
+	// pública entregaria ao liderado justamente o que foi cortado.
+	_, err = tx.Exec(`
+		INSERT INTO meeting_sources
+		  (tenant_id, meeting_id, fonte, kind, texto, texto_sha256, extrator,
+		   qualidade_extracao, confidencialidade)
+		VALUES ($1,$2,'gemini_notes','notas_sumarizadas',$3,$4,$5,$6,'privado_coordenador')
+		ON CONFLICT (tenant_id, meeting_id, texto_sha256) DO UPDATE SET
+		  qualidade_extracao = EXCLUDED.qualidade_extracao`,
+		tenantID, meetingID, texto, hex.EncodeToString(soma[:]), extrator, qualidade)
+	if err != nil {
+		return fmt.Errorf("fonte: %w", err)
+	}
+
+	rel.Notas++
+	rel.Etapas += len(n.Etapas)
+	if divergente {
+		rel.Revisao = append(rel.Revisao, fmt.Sprintf(
+			"%s: data do nome (%s) difere da do conteúdo (%s)", arquivo, dataArquivo, data))
+	}
+	return tx.Commit()
+}
+
+func gravarPDFTranscricao(db *sql.DB, tenantID int64, arquivo, texto, extrator,
+	qualidade, coordenador string, rel *RelProcessamento) error {
+
+	t, err := ParseGeminiTranscricao(texto, coordenador)
+	if err != nil {
+		return err
+	}
+	// O PDF de transcrição não imprime a data no corpo; o carimbo do nome é
+	// gerado pela ferramenta e, nesse formato, é confiável.
+	t.Data = DataDoNome(arquivo)
+	if t.Data == "" {
+		return fmt.Errorf("sem data no nome do arquivo")
+	}
+
+	m, err := ResolverPessoa(db, tenantID, t.Participante)
+	if err != nil {
+		return err
+	}
+	if m == nil {
+		return fmt.Errorf("não resolvi %q", t.Participante)
+	}
+	if m.Como != "exata" {
+		if err := GravarAlias(db, tenantID, m.PersonID, t.Participante, "transcricao"); err == nil {
+			rel.Aliases++
+		}
+	}
+	return gravarTranscricaoFonte(db, tenantID, m.PersonID, arquivo, t,
+		"gemini_transcript", extrator, qualidade, rel)
 }
 
 /* ---------- transcrições do Tactiq ---------- */
@@ -139,7 +332,8 @@ func processarTranscricoes(db *sql.DB, tenantID int64, raiz, coordenador string,
 			}
 		}
 
-		if err := gravarTranscricao(db, tenantID, m.PersonID, nome, t, rel); err != nil {
+		if err := gravarTranscricaoFonte(db, tenantID, m.PersonID, nome, t,
+			"tactiq", "tactiq_txt", "ok", rel); err != nil {
 			rel.Erros = append(rel.Erros, fmt.Sprintf("%s: %v", nome, err))
 			marcarArquivo(db, tenantID, nome, "erro", err.Error())
 			continue
@@ -149,8 +343,13 @@ func processarTranscricoes(db *sql.DB, tenantID int64, raiz, coordenador string,
 	return nil
 }
 
-func gravarTranscricao(db *sql.DB, tenantID, personID int64, arquivo string,
-	t *Transcricao, rel *RelProcessamento) error {
+// gravarTranscricaoFonte grava a transcrição, venha ela do Tactiq ou do PDF.
+//
+// Uma função só para as duas fontes é o que garante que a citação de evidência
+// funcione igual nas duas: mesmo texto canônico, mesmos offsets, mesma
+// deduplicação por sha256.
+func gravarTranscricaoFonte(db *sql.DB, tenantID, personID int64, arquivo string,
+	t *Transcricao, fonte, extrator, qualidade string, rel *RelProcessamento) error {
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -194,10 +393,11 @@ func gravarTranscricao(db *sql.DB, tenantID, personID int64, arquivo string,
 		INSERT INTO meeting_sources
 		  (tenant_id, meeting_id, fonte, kind, texto, texto_sha256, extrator,
 		   url_original, confidencialidade)
-		VALUES ($1,$2,'tactiq','transcricao_bruta',$3,$4,'tactiq_txt',$5,'privado_coordenador')
+		VALUES ($1,$2,$6,'transcricao_bruta',$3,$4,$7,$5,'privado_coordenador')
 		ON CONFLICT (tenant_id, meeting_id, texto_sha256) DO UPDATE SET fonte = EXCLUDED.fonte
 		RETURNING id, (xmax <> 0)`,
-		tenantID, meetingID, t.TextoCanonico, hash, nulo(t.URLOriginal)).Scan(&sourceID, &jaExistia)
+		tenantID, meetingID, t.TextoCanonico, hash, nulo(t.URLOriginal),
+		fonte, extrator).Scan(&sourceID, &jaExistia)
 	if err != nil {
 		return fmt.Errorf("fonte: %w", err)
 	}

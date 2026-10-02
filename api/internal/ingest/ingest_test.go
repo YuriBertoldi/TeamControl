@@ -203,3 +203,29 @@ func TestDataDoNomePrefereOFormatoISO(t *testing.T) {
 		t.Errorf("data %q, esperado 2026-09-22", got)
 	}
 }
+
+// A data digitada é a que erra — e é por isso que ela existe separada da
+// "melhor data disponível". Nomes sintéticos: o repositório não guarda dado.
+func TestDataDigitadaIgnoraOCarimboDaFerramenta(t *testing.T) {
+	casos := []struct{ nome, digitada, melhor string }{
+		// O caso que motivou a função: digitada 29/09, carimbo e conteúdo 25/09.
+		{"29-09-26 - FULANO DE TAL __ COORDENACAO - Reunião 1-1 - 2026_09_25 11_00 GMT-03_00 - Anotações do Gemini.pdf",
+			"2026-09-29", "2026-09-25"},
+		// Ano com quatro dígitos no prefixo também é digitado.
+		{"07-07-2026 - FULANO __ COORDENACAO - Reunião 1-1 - 2026_07_07 14_01 GMT-03_00 - Anotações do Gemini.pdf",
+			"2026-07-07", "2026-07-07"},
+		// Sem prefixo digitado: só o carimbo. Nada a confrontar.
+		{"TL - Apresentação - 2026_09_16 13_56 GMT-03_00 - Transcript.pdf",
+			"", "2026-09-16"},
+		// Registro .md não tem data digitada no formato DD-MM-AA.
+		{"2026-09-22_fulano.md", "", "2026-09-22"},
+	}
+	for _, c := range casos {
+		if got := DataDigitadaNoNome(c.nome); got != c.digitada {
+			t.Errorf("DataDigitadaNoNome(%.30s…) = %q, esperado %q", c.nome, got, c.digitada)
+		}
+		if got := DataDoNome(c.nome); got != c.melhor {
+			t.Errorf("DataDoNome(%.30s…) = %q, esperado %q", c.nome, got, c.melhor)
+		}
+	}
+}
