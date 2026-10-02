@@ -25,10 +25,11 @@ import (
 
 func main() {
 	var (
-		soMigrar = flag.Bool("migrate", false, "aplica as migrations e sai")
-		seedDir  = flag.String("seed", "", "pasta de registros para a carga inicial")
-		dryRun   = flag.Bool("dry-run", false, "com -seed, não grava nada")
-		porta    = flag.String("porta", env("PORTA", "8080"), "porta HTTP")
+		soMigrar  = flag.Bool("migrate", false, "aplica as migrations e sai")
+		seedDir   = flag.String("seed", "", "pasta de registros para a carga inicial")
+		procDir   = flag.String("processar", "", "pasta de registros para processar o conteúdo")
+		dryRun    = flag.Bool("dry-run", false, "com -seed, não grava nada")
+		porta     = flag.String("porta", env("PORTA", "8080"), "porta HTTP")
 	)
 	flag.Parse()
 
@@ -62,6 +63,20 @@ func main() {
 		if *dryRun {
 			log.Println("dry-run: nada foi gravado")
 		}
+		return
+	}
+
+	// -processar roda DEPOIS do -seed: o seed registra que o arquivo existe,
+	// isto lê o conteúdo. Separados porque a varredura é barata e repetível,
+	// e o processamento depende de o cadastro de pessoas já estar no lugar —
+	// sem pessoa cadastrada, toda transcrição cairia em revisão manual.
+	if *procDir != "" {
+		rel, err := ingest.Processar(db, tenantID, *procDir,
+			env("COORDENADOR_NOME", "Yuri Bulhões Bertoldi"))
+		if err != nil {
+			log.Fatalf("processar: %v", err)
+		}
+		log.Print(rel.Resumo())
 		return
 	}
 

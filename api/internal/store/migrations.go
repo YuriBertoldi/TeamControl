@@ -690,4 +690,19 @@ var migrations = []migration{
 		`ALTER TABLE people ADD COLUMN ultimo_reajuste DATE`,
 		`ALTER TABLE people ADD COLUMN faixa_salarial VARCHAR(60)`,
 	}},
+
+	{version: 8, name: "defesa_sem_tese", stmts: []string{
+		// A tese deixa de ser obrigatória na defesa de calibragem.
+		//
+		// O material real tem uma defesa escrita sem linha de tese — e não é
+		// descuido: é justamente o caso em que o quadrante pedido não se
+		// sustentou na evidência, e o autor foi direto para as âncoras
+		// objetivas em vez de abrir com um resumo que não se sustentaria.
+		//
+		// O que o sistema exige de uma defesa é a CONTRA-EVIDÊNCIA, não o
+		// resumo: é ela que responde "por que não mais alto" na mesa. Obrigar
+		// a tese forçaria a inventar uma frase para satisfazer o banco, que é
+		// exatamente o tipo de preenchimento que esvazia o instrumento.
+		`ALTER TABLE avd_calibration_defenses ALTER COLUMN tese DROP NOT NULL`,
+	}},
 }
