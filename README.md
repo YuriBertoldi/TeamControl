@@ -23,16 +23,16 @@ meses".
 ## Como rodar
 
 ```bash
-# Banco (Postgres 16 em 127.0.0.1:55432 — a 5432 cai na faixa reservada
-# pelo Hyper-V no Windows). O compose vive em api/, não na raiz.
+# Aponte a sua pasta de registros. O compose vive em api/, não na raiz.
 cd api
-docker compose up -d
+cp .env.example .env        # edite PASTA_REGISTROS
 
-# Migrations e, se você já tiver uma pasta de registros, a carga
-go run ./cmd/api -migrate
-go run ./cmd/api -seed "<sua pasta de registros>" -dry-run
-go run ./cmd/api -seed "<sua pasta de registros>"
-go run ./cmd/api -porta 8080
+# Sobe Postgres e API. As migrations rodam sozinhas na subida.
+docker compose up -d --build
+
+# Carga da pasta: confira no seco antes de gravar
+docker compose exec api /bin/api -seed /data/registros -dry-run
+docker compose exec api /bin/api -seed /data/registros
 
 # Frontend
 cd ../web
@@ -47,8 +47,16 @@ cd api && go test ./... && go vet ./...
 cd web && npm test && npm run build
 ```
 
-O `-seed` é **idempotente**: rodar duas vezes não duplica nada. A segunda
+O `-seed` é **idempotente**: rodar duas vezes não duplica nada — a segunda
 execução informa quantos arquivos já eram conhecidos.
+
+A pasta entra no container **somente leitura**: a ingestão lê e nunca escreve.
+O Postgres escuta em `127.0.0.1:55432` e não publica porta para fora da
+máquina — dado de avaliação e risco de retenção não sai daqui.
+
+> **O dado vive no banco, não no repositório.** Os módulos de `web/src/data/`
+> são catálogo e tipo; o acervo de verdade entra pela ingestão e fica no
+> Postgres, num volume local. O `.env` que aponta a sua pasta não é versionado.
 
 ---
 
