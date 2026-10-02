@@ -86,8 +86,8 @@ Em ordem, do que está sendo feito para o que falta começar.
 
 ## Pendências anteriores que seguem abertas
 
-- [x] **Frontend ligado ao backend.**  + :
-      na subida,  busca pessoas, tribos e squads da API e preenche
+- [x] **Frontend ligado ao backend.** `src/lib/api.ts` e `src/data/origem.ts`:
+      na subida, `conectar()` busca pessoas, tribos e squads da API e preenche
       o cache; as telas seguem lendo de forma síncrona. Gravação vai para o
       cache e para o banco. Sem API, o sistema abre com o último estado
       conhecido — e avisa no console quando uma gravação não chegou ao
