@@ -1,0 +1,49 @@
+# Dependências e artefatos de build
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+.vite/
+
+# Go
+/api/teamcontrol
+/api/teamcontrol.exe
+*.test
+*.out
+
+# Ambiente e segredos
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---------------------------------------------------------------------------
+# DADO DE PESSOA — nunca versionar
+#
+# O acervo bruto (transcrições, registros de 1:1, dossiês, rascunhos de AVD)
+# vive FORA deste repositório, em registros-demo. Se alguém copiar a pasta para
+# cá, estas regras impedem o commit acidental.
+#
+# O mesmo vale para o repositório de dados exportados previsto no plano
+# (gestao-pessoas-dados/): git privado, local, fora de qualquer sync de nuvem.
+# ---------------------------------------------------------------------------
+registros-demo/
+registros-1-1/
+AVD-*/
+Dossies/
+Rascunhos/
+gestao-pessoas-dados/
+*.xlsx
+*.pdf
+packs/
+relatorios/
+
+# Sistema operacional e editor
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+.idea/
+.vscode/
+!.vscode/extensions.json

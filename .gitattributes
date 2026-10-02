@@ -1,0 +1,24 @@
+# Normaliza fim de linha para LF no repositório.
+#
+# O projeto é editado no Windows mas o backend roda em container Linux. Sem
+# isso, o mesmo arquivo gera diff só por causa de CRLF, e o `go vet` reclama
+# em uma máquina e não na outra.
+* text=auto eol=lf
+
+# Arquivos que precisam de CRLF no disco do Windows para abrir direito.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binários: nunca converter.
+*.png binary
+*.jpg binary
+*.pdf binary
+*.xlsx binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+
+# Gerado — não revisar linha a linha em pull request.
+web/package-lock.json linguist-generated=true
+web/src/data/dnaInstrumento.ts linguist-generated=true
+web/src/data/registros.ts linguist-generated=true

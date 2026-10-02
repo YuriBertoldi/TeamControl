@@ -1,0 +1,35 @@
+# TeamControl — tudo local. Dado de avaliação e risco de retenção não sai da
+# máquina: o Postgres não publica porta para fora de 127.0.0.1.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: teamcontrol
+      POSTGRES_PASSWORD: teamcontrol
+      POSTGRES_DB: teamcontrol
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - dados:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U teamcontrol"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgres://teamcontrol:teamcontrol@db:5432/teamcontrol?sslmode=disable
+      COORDENADOR_EMAIL: coordenacao@exemplo.com
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # A pasta de registros entra somente leitura: a ingestão lê, nunca escreve.
+      - "${PASTA_REGISTROS:-C:/dados/registros-demo}:/data/registros:ro"
+
+volumes:
+  dados:
