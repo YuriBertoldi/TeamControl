@@ -145,7 +145,16 @@ export const timeDe = (id: string): Time =>
  */
 export const PESSOAS: Pessoa[] = carregarPessoas();
 
-export const porSlug = (s: string) => PESSOAS.find((p) => p.slug === s)!;
+/**
+ * Pessoa pelo slug, ou `undefined`.
+ *
+ * Tinha um `!` no fim, que afirmava ao compilador que a pessoa sempre existe.
+ * Não existe: slug de uma base antiga, pessoa removida do cadastro, rota
+ * digitada à mão. O `!` não evitou nada disso — só escondeu, e a tela quebrou
+ * em branco. Devolver `undefined` faz o compilador cobrar o caso em cada
+ * chamada, que é onde a decisão certa muda conforme a tela.
+ */
+export const porSlug = (s: string) => PESSOAS.find((p) => p.slug === s);
 
 /** Só quem está sob a sua gestão hoje — exclui desligado e fora_gestao. */
 export const souMeus = () => PESSOAS.filter((p) => p.status === 'ativo' || p.status === 'afastado');

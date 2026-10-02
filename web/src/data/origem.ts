@@ -18,7 +18,7 @@
  */
 
 import { api } from '../lib/api';
-import { escreverJSON, lerJSON } from './armazenamento';
+import { escreverJSON, lerJSON, escrever } from './armazenamento';
 
 let online = false;
 let tentouConectar = false;
@@ -37,18 +37,29 @@ export const jaTentou = () => tentouConectar;
  */
 export async function conectar(): Promise<boolean> {
   tentouConectar = true;
-  online = await api.saude();
+  const s = await api.saude();
+  online = s.ok;
   if (!online) return false;
 
-  // Em paralelo: são três consultas independentes e pequenas.
-  const [pessoas, tribos, squads] = await Promise.all([
-    api.pessoas(), api.tribos(), api.squads(),
+  // Em paralelo: são consultas independentes e pequenas. O índice de registros
+  // cabe aqui porque NÃO traz texto — só contagem e metadado. A transcrição e
+  // o markdown vêm por `api.registro(id)` quando a conversa é aberta; as 52
+  // fontes somam quase 1 MB e não têm por que viajar na abertura da tela.
+  const [pessoas, tribos, squads, registros, importacoes] = await Promise.all([
+    api.pessoas(), api.tribos(), api.squads(), api.registros(), api.importacoes(),
   ]);
 
   // Só sobrescreve o cache do que a API de fato devolveu. Uma consulta que
   // falhou sozinha não pode zerar o que o navegador já tinha.
   if (pessoas) escreverJSON('pessoas', pessoas);
   if (tribos) escreverJSON('tribos', tribos);
+  if (registros) escreverJSON('registros', registros);
+  if (importacoes) escreverJSON('importacoes', importacoes);
+
+  // O caminho vai para chave própria, e não para dentro da config: a config só
+  // é persistida quando alguém a edita, então gravar nela aqui criaria um
+  // objeto parcial que sobrescreveria o padrão.
+  if (s.pasta) escrever("pastaBackend", s.pasta);
 
   // Squads moram dentro da config, e não numa chave própria. A gravação é
   // feita direto no armazenamento em vez de passar por `salvarConfig` para

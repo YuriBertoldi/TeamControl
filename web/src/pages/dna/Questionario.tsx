@@ -13,6 +13,7 @@
  *    faria o sistema ser contornado no primeiro uso.
  */
 
+import { PessoaNaoEncontrada } from '../../app/ui';
 import { useState } from 'react';
 import { VStack } from '@astryxdesign/core/VStack';
 import { HStack } from '@astryxdesign/core/HStack';
@@ -71,6 +72,7 @@ function Perguntas({ slug, aoSalvar }: { slug: string; aoSalvar: () => void }) {
 
   const ap = apurar(respostas);
   const p = porSlug(slug);
+  if (!p) return <PessoaNaoEncontrada slug={slug} />;
 
   const salvar = () => {
     gravarDNA({ slug, data, respostas, origem: 'questionario', nota: nota || undefined });
@@ -220,7 +222,7 @@ function ImportarTotais({ slug, aoSalvar }: { slug: string; aoSalvar: () => void
             <Card padding={2} variant="muted">
               <VStack gap={1}>
                 <Text type="label">Perfil que estes números produzem</Text>
-                {descricaoPessoal(ap, porSlug(slug).curto).map((par, i) => (
+                {descricaoPessoal(ap, porSlug(slug)?.curto ?? slug).map((par, i) => (
                   <Text key={i} type={i === 0 ? 'body' : 'supporting'}>{par}</Text>
                 ))}
               </VStack>

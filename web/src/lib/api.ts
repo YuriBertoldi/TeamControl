@@ -37,9 +37,9 @@ export class ErroAPI extends Error {
   }
 }
 
-async function requisitar<T>(caminho: string, init?: RequestInit): Promise<T> {
+async function requisitar<T>(caminho: string, init?: RequestInit, timeoutMs = TIMEOUT_MS): Promise<T> {
   const controle = new AbortController();
-  const timer = setTimeout(() => controle.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controle.abort(), timeoutMs);
   try {
     const resp = await fetch(`${BASE}${caminho}`, {
       ...init,
@@ -57,9 +57,9 @@ async function requisitar<T>(caminho: string, init?: RequestInit): Promise<T> {
 }
 
 /** Executa e devolve `null` em qualquer falha — para o caminho de leitura. */
-async function tentar<T>(caminho: string): Promise<T | null> {
+async function tentar<T>(caminho: string, timeoutMs = TIMEOUT_MS): Promise<T | null> {
   try {
-    return await requisitar<T>(caminho);
+    return await requisitar<T>(caminho, undefined, timeoutMs);
   } catch {
     return null;
   }
@@ -68,15 +68,34 @@ async function tentar<T>(caminho: string): Promise<T | null> {
 /* ---------- leitura ---------- */
 
 export const api = {
-  async saude(): Promise<boolean> {
-    const r = await tentar<{ ok: boolean }>('/api/saude');
-    return r?.ok === true;
+  /**
+   * Saúde do backend e a pasta que ele varre.
+   *
+   * A pasta vem junto porque o front tinha a mesma configuração duplicada,
+   * com um caminho de demonstração por padrão — e a tela de Importações
+   * exibia um diretório que não era o varrido de fato.
+   */
+  async saude(): Promise<{ ok: boolean; pasta: string }> {
+    const r = await tentar<{ ok: boolean; pasta?: string }>("/api/saude");
+    return { ok: r?.ok === true, pasta: r?.pasta ?? "" };
   },
 
   pessoas: () => tentar<Pessoa[]>('/api/pessoas'),
   tribos: () => tentar<Tribo[]>('/api/tribos'),
   squads: () => tentar<Squad[]>('/api/squads'),
   importacoes: () => tentar<ArquivoAPI[]>('/api/importacoes'),
+
+  /** Índice das conversas: contagem e metadado, sem texto. */
+  registros: () => tentar<RegistroAPI[]>('/api/registros'),
+
+  /**
+   * Conteúdo de uma conversa: as partes do registro E as transcrições.
+   *
+   * Timeout maior que o padrão: uma transcrição passa de 18 mil caracteres e
+   * há conversa com duas fontes. Dois segundos derrubariam a abertura num
+   * banco com a pasta inteira carregada.
+   */
+  registro: (id: number) => tentar<DetalheRegistroAPI>(`/api/registros/${id}`, 8000),
 
   /* ---------- escrita ---------- */
 
@@ -110,4 +129,80 @@ export interface ArquivoAPI {
   dataReuniao?: string;
   dataArquivo?: string;
   pessoaId?: number;
+}
+
+/* ---------- registros de 1:1 ---------- */
+
+/** Uma das versões escritas da conversa. */
+export interface ParteAPI {
+  formato: 'compartilhavel' | 'privado_coordenador' | 'avaliacao_1a1';
+  /** 1 público ao liderado · 2 RH/calibragem · 3 privado · 4 restrito saúde. */
+  conf: 1 | 2 | 3 | 4;
+  markdown?: string;
+}
+
+/**
+ * O lastro da conversa: a transcrição ou as anotações de onde o registro saiu.
+ *
+ * É o que responde "onde foi que ele disse isso". A transcrição bruta vem
+ * sempre em confidencialidade 3 — ela contém tudo o que foi falado, inclusive
+ * o que o registro compartilhável cortou de propósito.
+ */
+export interface FonteAPI {
+  id: number;
+  fonte: 'tactiq' | 'gemini_notes' | 'gemini_transcript';
+  kind: 'transcricao_bruta' | 'notas_sumarizadas' | 'payload_api';
+  extrator: string;
+  qualidade: 'ok' | 'parcial' | 'falhou' | 'revisado_manual';
+  conf: 1 | 2 | 3 | 4;
+  falas: number;
+  caracteres: number;
+  texto?: string;
+}
+
+export interface EncaminhamentoAPI {
+  responsavel: string;
+  tipo: 'liderado' | 'coordenador' | 'terceiro' | 'ambos';
+  descricao: string;
+  prazoTexto: string;
+  prazoVago: boolean;
+  status: string;
+}
+
+/** Registra QUE havia material cortado e por quê — nunca o conteúdo. */
+export interface OmissaoAPI {
+  item: string;
+  onde: string;
+  motivo: string;
+}
+
+export interface RegistroAPI {
+  id: number;
+  slug: string;
+  pessoa: string;
+  data: string;
+  arquivo: string;
+  duracao: string;
+  fonte: string;
+  tema: string;
+  performance: string | null;
+  impacto: number | null;
+  encaminhamentos: number;
+  prazosVagos: number;
+  meus: number;
+  proximaConversa: number;
+  partes: ParteAPI[];
+  fontes: FonteAPI[];
+  omitidos: number;
+  omitidoSaude: number;
+  bytes: number;
+  /** A data do nome do arquivo não bate com a do conteúdo. */
+  divergencia: boolean;
+}
+
+export interface DetalheRegistroAPI extends RegistroAPI {
+  listaEncaminhamentos: EncaminhamentoAPI[];
+  listaOmissoes: OmissaoAPI[];
+  perfJustificativa?: string;
+  impactoJustificativa?: string;
 }

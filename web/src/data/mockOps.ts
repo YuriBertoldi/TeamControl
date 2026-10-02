@@ -11,12 +11,16 @@
  */
 
 import type { Confidencialidade } from './mock';
+import { lerJSON } from './armazenamento';
 
 /* ---------- Importações ---------- */
 
 export type TipoFonte =
   | 'tactiq_txt' | 'gemini_notes_pdf' | 'gemini_transcript_pdf'
-  | 'registro_md' | 'dossie_md' | 'rascunho_avd_md' | 'material_avd_pdf';
+  | 'registro_md' | 'dossie_md' | 'rascunho_avd_md' | 'material_avd_pdf'
+  // O banco classifica estes dois e a API os devolve; o tipo do front não os
+  // conhecia, então a contagem do acervo os deixava invisíveis.
+  | 'feedback_md' | 'colado' | 'desconhecido';
 
 export type StatusFonte = 'processado' | 'pendente' | 'revisao_manual' | 'ignorado' | 'erro';
 
@@ -42,6 +46,9 @@ export const TIPO_ROTULO: Record<TipoFonte, string> = {
   dossie_md: 'Dossiê AVD',
   rascunho_avd_md: 'Rascunho AVD',
   material_avd_pdf: 'Material AVD',
+  feedback_md: 'Feedback .md',
+  colado: 'Colado',
+  desconhecido: 'Não classificado',
 };
 
 export const STATUS_ROTULO: Record<StatusFonte, string> = {
@@ -52,7 +59,14 @@ export const STATUS_ROTULO: Record<StatusFonte, string> = {
   erro: 'Erro',
 };
 
-export const ARQUIVOS: ArquivoFonte[] = [];
+/**
+ * A fila de importação, vinda do banco.
+ *
+ * Lida do cache que `conectar()` preenche: é a varredura do backend que
+ * conhece a pasta, não o navegador. Manter isto como constante significava
+ * uma tela que dizia "0 arquivos" com 121 catalogados no banco.
+ */
+export const ARQUIVOS: ArquivoFonte[] = lerJSON<ArquivoFonte[]>('importacoes', []);
 
 /**
  * Números reais da pasta, para o painel não mentir sobre o tamanho do acervo.
@@ -60,17 +74,25 @@ export const ARQUIVOS: ArquivoFonte[] = [];
  * Os números vêm da varredura do backend, nunca de contagem manual: pasta de
  * trabalho costuma ter temporários do Office que inflam o total.
  */
+/**
+ * Contagem do acervo, DERIVADA da varredura — nunca digitada.
+ *
+ * Pasta de trabalho acumula temporário do Office e arquivo duplicado; número
+ * contado à mão envelhece no dia seguinte e ninguém percebe.
+ */
+const conta = (t: TipoFonte) => ARQUIVOS.filter((a) => a.tipo === t).length;
+
 export const ACERVO = {
-  totalArquivos: 0,
-  tactiq: 0,
-  geminiNotas: 0,
-  geminiTranscricao: 0,
-  materialAvd: 0,
-  registrosProcessados: 0,
-  dossies: 0,
-  rascunhos: 0,
-  feedbacks: 0,
-  naoClassificado: 0,
+  totalArquivos: ARQUIVOS.length,
+  tactiq: conta("tactiq_txt"),
+  geminiNotas: conta("gemini_notes_pdf"),
+  geminiTranscricao: conta("gemini_transcript_pdf"),
+  materialAvd: conta("material_avd_pdf"),
+  registrosProcessados: ARQUIVOS.filter((a) => a.status === "processado").length,
+  dossies: conta("dossie_md"),
+  rascunhos: conta("rascunho_avd_md"),
+  feedbacks: conta("feedback_md"),
+  naoClassificado: conta("desconhecido"),
 };
 
 /* ---------- Relatórios ---------- */

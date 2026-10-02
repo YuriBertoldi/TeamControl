@@ -25,7 +25,7 @@ import { Divider } from '@astryxdesign/core/Divider';
 import { List, ListItem } from '@astryxdesign/core/List';
 import { Link2, Sparkles } from 'lucide-react';
 
-import { Page, Metrica } from '../app/ui';
+import { Page, Metrica , PessoaNaoEncontrada } from '../app/ui';
 import { porSlug, souMeus } from '../data/mock';
 import {
   AVD, QUADRANTES_9BOX,
@@ -127,7 +127,7 @@ export default function AVDPage() {
           status="error"
           title={`${incoerentes.length} avaliação(ões) com quadrante incoerente`}
           description={incoerentes.map((a) =>
-            `${porSlug(a.slug).curto}: declarado ${a.quadrante}, mas as notas dão C ${a.fc} · D ${a.fd}`,
+            `${porSlug(a.slug)?.curto ?? a.slug}: declarado ${a.quadrante}, mas as notas dão C ${a.fc} · D ${a.fd}`,
           ).join(' · ')}
         />
       )}
@@ -136,7 +136,7 @@ export default function AVDPage() {
         <Banner
           status="warning"
           title={`${totalBuracos} drivers ainda sem evidência vinculada`}
-          description={`Concentrados em ${semEvidencia.map((a) => porSlug(a.slug).curto).join(', ')}. Driver sem lastro é o que a mesa derruba.`}
+          description={`Concentrados em ${semEvidencia.map((a) => porSlug(a.slug)?.curto ?? a.slug).join(', ')}. Driver sem lastro é o que a mesa derruba.`}
         />
       )}
 
@@ -182,7 +182,7 @@ export default function AVDPage() {
                           key={a.slug}
                           size="sm"
                           color={a.slug === selecionado ? 'purple' : 'blue'}
-                          label={porSlug(a.slug).curto}
+                          label={porSlug(a.slug)?.curto ?? a.slug}
                           onClick={() => setSelecionado(a.slug)}
                           endContent={a.buracos > 0
                             ? <Text type="supporting">⚠</Text> : undefined}
@@ -215,7 +215,7 @@ export default function AVDPage() {
                 .map((a) => (
                   <ListItem
                     key={a.slug}
-                    label={porSlug(a.slug).nome}
+                    label={porSlug(a.slug)?.nome ?? a.slug}
                     startContent={<StatusDot variant={a.buracos ? 'warning' : 'success'}
                                              label={a.buracos ? 'Faltam evidências' : 'Completo'} />}
                     endContent={<Text type="supporting" hasTabularNumbers>
@@ -239,6 +239,7 @@ function DetalheAvaliacao({ a, ciclo, escala, bloqueado }: {
   bloqueado: boolean;
 }) {
   const p = porSlug(a.slug);
+  if (!p) return <PessoaNaoEncontrada slug={a.slug} />;
   return (
     <VStack gap={2}>
       <HStack gap={2} vAlign="center" wrap="wrap">

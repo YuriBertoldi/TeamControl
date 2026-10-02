@@ -22,7 +22,7 @@ import { List, ListItem } from '@astryxdesign/core/List';
 import { StatusDot } from '@astryxdesign/core/StatusDot';
 import { Download, PenLine, RefreshCw, ShieldCheck } from 'lucide-react';
 
-import { Page, Metrica, Ev } from '../app/ui';
+import { Page, Metrica, Ev , PessoaNaoEncontrada } from '../app/ui';
 import { ListaDetalhe, Detalhe, Bloco, type LinhaEnxuta } from '../app/ListaDetalhe';
 import { porSlug } from '../data/mock';
 import { DEFESAS, AVD, media, faixa, type Defesa } from '../data/mockCiclo';
@@ -41,7 +41,7 @@ export default function Calibragem() {
     const a = AVD.find((x) => x.slug === d.slug)!;
     return {
       id: d.slug,
-      titulo: porSlug(d.slug).nome,
+      titulo: porSlug(d.slug)?.nome ?? d.slug,
       dot: DOT_RISCO[d.nivelRisco],
       dotLabel: `Risco ${d.nivelRisco}`,
       marcadores: [
@@ -106,7 +106,7 @@ export default function Calibragem() {
               const md = media(a.desempenho);
               return (
                 <Detalhe
-                  titulo={porSlug(d.slug).nome}
+                  titulo={porSlug(d.slug)?.nome ?? d.slug}
                   marcadores={
                     <>
                       <Token size="sm" color="blue" label={a.quadrante} />
@@ -135,7 +135,7 @@ export default function Calibragem() {
 
                     <Bloco rotulo="Trajetória 2026">
                       <HStack gap={0.5} wrap="wrap">
-                        {porSlug(d.slug).trajetoria.map((t, i) => (
+                        {(porSlug(d.slug)?.trajetoria ?? []).map((t, i) => (
                           <Token key={i} size="sm"
                                  color={t === 'E' ? 'green' : t === 'S' ? 'blue' : 'gray'}
                                  label={t === 'af' ? 'afast.' : t} />
@@ -187,7 +187,7 @@ export default function Calibragem() {
               {DEFESAS.map((d) => (
                 <ListItem
                   key={d.slug}
-                  label={porSlug(d.slug).nome}
+                  label={porSlug(d.slug)?.nome ?? d.slug}
                   startContent={<StatusDot variant="neutral" label="Aguardando mesa" />}
                   endContent={<Button icon={<PenLine size={14} />} size="sm" variant="ghost" label="Registrar desfecho" />}
                   description={<Text type="supporting">Previsto: {d.risco}</Text>}
@@ -205,6 +205,7 @@ export default function Calibragem() {
 function CardMesa({ d }: { d: Defesa }) {
   const a = AVD.find((x) => x.slug === d.slug)!;
   const p = porSlug(d.slug);
+  if (!p) return <PessoaNaoEncontrada slug={d.slug} />;
   return (
     <Card padding={4}>
       <VStack gap={2}>

@@ -75,12 +75,38 @@ export const CONFIG_PADRAO: Config = {
 
 const CHAVE = 'config';
 
+/**
+ * Caminho que o backend de fato varre, gravado por `conectar()`.
+ *
+ * Fica em chave propria porque a config so e persistida quando alguem a
+ * edita: gravar dentro dela na subida criaria um objeto parcial que
+ * sobrescreveria o padrao.
+ */
+const CHAVE_PASTA = "pastaBackend";
+
 export function carregarConfig(): Config {
+  const base = configSalva();
+  const doBackend = ler(CHAVE_PASTA);
+  if (!doBackend) return base;
+  // O caminho do backend vence o configurado no front: quem varre e ele,
+  // e a tela exibia um diretorio de demonstracao com a pasta real no banco.
+  return {
+    ...base,
+    pastas: base.pastas.map((p) => (p.id === "principal" ? { ...p, caminho: doBackend } : p)),
+  };
+}
+
+function configSalva(): Config {
   try {
     const salvo = ler(CHAVE);
     if (!salvo) return CONFIG_PADRAO;
     // Merge raso: chave nova no padrão continua valendo mesmo com config antiga salva.
-    return { ...CONFIG_PADRAO, ...JSON.parse(salvo) as Partial<Config> };
+    const c = { ...CONFIG_PADRAO, ...JSON.parse(salvo) as Partial<Config> };
+    // Lista de pastas vazia não é configuração válida, é config corrompida —
+    // e uma vez gravada no navegador deixaria a tela de Importações quebrada
+    // para sempre, sem caminho para voltar. Cair no padrão é recuperável.
+    if (!c.pastas?.length) c.pastas = CONFIG_PADRAO.pastas;
+    return c;
   } catch {
     return CONFIG_PADRAO;
   }

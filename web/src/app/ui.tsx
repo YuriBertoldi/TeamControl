@@ -231,3 +231,25 @@ export function LegendaComposicao({ partes }: {
     </HStack>
   );
 }
+
+/**
+ * Pessoa que o slug não encontra.
+ *
+ * Acontece de verdade: slug de uma base antiga, alguém removido do cadastro,
+ * rota digitada à mão, registro no banco apontando para pessoa que saiu. Antes
+ * isto era um `!` no `porSlug` e a tela ficava branca, sem mensagem nenhuma.
+ *
+ * Mostrar o slug não é detalhe: é o que permite achar o registro órfão e
+ * decidir se é dado a corrigir ou cadastro a refazer.
+ */
+export function PessoaNaoEncontrada({ slug }: { slug: string }) {
+  return (
+    <VStack gap={1} padding={3}>
+      <Text type="label">Liderado não encontrado</Text>
+      <Text type="supporting">
+        Nenhuma pessoa cadastrada com o identificador <strong>{slug}</strong>. Ou ela
+        saiu do cadastro, ou este registro ficou órfão de uma carga anterior.
+      </Text>
+    </VStack>
+  );
+}

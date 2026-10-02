@@ -49,6 +49,8 @@ interface Linha extends LinhaEnxuta { a: ArquivoFonte }
 
 export default function Importacoes() {
   const cfg = carregarConfig();
+  // `?? cfg.pastas[0]` ainda devolve undefined com a lista vazia. A tela não
+  // pode quebrar por causa de configuração ruim — ela mostra o que tem.
   const principal = cfg.pastas.find((p) => p.ativa) ?? cfg.pastas[0];
 
   const [aba, setAba] = useState('fila');
@@ -89,7 +91,7 @@ export default function Importacoes() {
   return (
     <Page
       titulo="Importações"
-      subtitulo={`${principal.caminho} · varredura a cada ${cfg.intervaloVarreduraSeg}s · ${ACERVO.totalArquivos} arquivos`}
+      subtitulo={`${principal?.caminho ?? "pasta não configurada"} · varredura a cada ${cfg.intervaloVarreduraSeg}s · ${ACERVO.totalArquivos} arquivos`}
       acoes={<Button icon={<RefreshCw size={14} />} label="Varrer agora" />}
       largura={1240}
     >

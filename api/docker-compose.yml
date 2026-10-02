@@ -22,6 +22,9 @@ services:
     environment:
       DATABASE_URL: postgres://teamcontrol:teamcontrol@db:5432/teamcontrol?sslmode=disable
       COORDENADOR_EMAIL: coordenacao@exemplo.com
+      # O caminho DO HOST, só para a tela mostrar onde a varredura acontece.
+      # Dentro do container ele é /data/registros, que não diz nada a quem lê.
+      PASTA_REGISTROS_HOST: "${PASTA_REGISTROS:-}"
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:

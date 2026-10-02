@@ -30,7 +30,7 @@ import { ProgressBar } from '@astryxdesign/core/ProgressBar';
 import { Avatar } from '@astryxdesign/core/Avatar';
 import { ArrowLeft, MessagesSquare, Sparkles } from 'lucide-react';
 
-import { Page, Stats, Conf, corDaCadeira, rotuloCargo } from '../app/ui';
+import { Page, Stats, Conf, corDaCadeira, rotuloCargo , PessoaNaoEncontrada } from '../app/ui';
 import { Bloco } from '../app/ListaDetalhe';
 import { useNavegacao } from '../app/navegacao';
 import {
@@ -59,6 +59,7 @@ export default function PessoaPerfil({ slug }: { slug: string }) {
   const [aba, setAba] = useState('geral');
 
   const p = porSlug(slug);
+  if (!p) return <PessoaNaoEncontrada slug={slug} />;
   const cfg = carregarConfig();
   const limite = cfg.cadenciaDias + cfg.folgaCadenciaDias;
   const dias = diasEntre(p.ultima1a1, HOJE);
@@ -155,6 +156,7 @@ export default function PessoaPerfil({ slug }: { slug: string }) {
 
 function Geral({ slug }: { slug: string }) {
   const p = porSlug(slug);
+  if (!p) return <PessoaNaoEncontrada slug={slug} />;
   const dna = DNA_QUALITATIVO[slug];
   const temas = TEMAS[slug];
   const abertos = COMPROMISSOS.filter((c) => c.pessoa === slug && c.status !== 'concluido');
@@ -255,6 +257,7 @@ function Geral({ slug }: { slug: string }) {
 function Remuneracao({ slug }: { slug: string }) {
   const [visivel, setVisivel] = useState(false);
   const p = porSlug(slug);
+  if (!p) return <PessoaNaoEncontrada slug={slug} />;
 
   if (!p.salario && !p.ultimoReajuste) {
     return (
@@ -373,7 +376,7 @@ function AbaDNA({ slug }: { slug: string }) {
 
           {/* A leitura desta pessoa primeiro; o texto do tipo é referência. */}
           <VStack gap={1}>
-            {descricaoPessoal(ap, porSlug(slug).curto).map((par, i) => (
+            {descricaoPessoal(ap, porSlug(slug)?.curto ?? slug).map((par, i) => (
               <Text key={i} type="body">{par}</Text>
             ))}
           </VStack>
@@ -616,6 +619,7 @@ function Conversas({ slug }: { slug: string }) {
 
 function AbaSkills({ slug }: { slug: string }) {
   const p = porSlug(slug);
+  if (!p) return <PessoaNaoEncontrada slug={slug} />;
   const esperado = skillsDoCargo(p.cargo, p.techLead);
   const atual = NIVEIS[slug] ?? {};
   const auto = AUTO[slug] ?? {};
@@ -703,6 +707,7 @@ function AbaAVD({ slug, avaliacao }: {
   avaliacao: typeof AVD[number] | undefined;
 }) {
   const p = porSlug(slug);
+  if (!p) return <PessoaNaoEncontrada slug={slug} />;
   const ciclos = carregarCiclos();
   const ciclo = ciclos.find((c) => c.id === avaliacao?.ciclo) ?? cicloVigente(ciclos);
   const escala = ['', ...ciclo.rotulosEscala];

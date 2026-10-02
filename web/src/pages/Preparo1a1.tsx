@@ -19,19 +19,20 @@ import { Heading } from '@astryxdesign/core/Heading';
 import { Button } from '@astryxdesign/core/Button';
 import { Token } from '@astryxdesign/core/Token';
 import { Banner } from '@astryxdesign/core/Banner';
+import { Page } from '../app/ui';
 import { Selector } from '@astryxdesign/core/Selector';
 import { TabList, Tab } from '@astryxdesign/core/TabList';
 
 import { AbaPauta } from './preparo/AbaPauta';
 import { AbaMaterial } from './preparo/AbaMaterial';
-import { SLUG_PADRAO } from './preparo/constantes';
+import { primeiroDaFila } from './preparo/constantes';
 import {
-  HOJE, TIMES, COMPROMISSOS, TEMAS, NOVIDADES, DNA, PESSOAS, PAUTA,
+  HOJE, timeDe, COMPROMISSOS, TEMAS, NOVIDADES, DNA, PESSOAS, PAUTA,
   porSlug, montarPauta, diasEntre,
 } from '../data/mock';
 
 export default function Preparo1a1() {
-  const [SLUG, setSlug] = useState(SLUG_PADRAO);
+  const [SLUG, setSlug] = useState(() => primeiroDaFila() ?? '');
   const [aba, setAba] = useState('pauta');
   const [duracao, setDuracao] = useState(45);
   const [descartados, setDescartados] = useState<Set<string>>(new Set());
@@ -43,7 +44,25 @@ export default function Preparo1a1() {
     setDescartados(new Set(descartados).add(id));
   };
 
+  // Sem ninguém cadastrado a tela não tem o que preparar — e dizer isso é
+  // melhor do que quebrar. Era exatamente o que acontecia: `porSlug` devolvia
+  // `undefined` para um slug inexistente e a tela virava branca.
   const p = porSlug(SLUG);
+  if (!p) {
+    return (
+      <Page titulo="Preparação de 1:1"
+            subtitulo="Sem liderado cadastrado, não há conversa para preparar.">
+        <Banner
+          status="info"
+          title="Nenhum liderado ativo"
+          description="Cadastre seu time em Cadastros › Pessoas. A preparação parte do
+                       histórico de 1:1, então ela ganha conteúdo conforme as conversas
+                       forem processadas."
+        />
+      </Page>
+    );
+  }
+
   const dna = DNA[SLUG];
   const dias = diasEntre(p.ultima1a1, HOJE);
   const r = montarPauta(SLUG, duracao, descartados);
@@ -98,7 +117,7 @@ export default function Preparo1a1() {
               )}
             </HStack>
             <Text type="supporting">
-              {p.cargo}{p.techLead ? ' · Tech Lead' : ''} · {TIMES[p.time].nome}
+              {p.cargo}{p.techLead ? " · Tech Lead" : ""} · {timeDe(p.time).nome}
             </Text>
             <HStack gap={3} wrap="wrap" vAlign="center">
               <Text type="supporting">Última 1:1 há {dias} dias</Text>
@@ -120,7 +139,11 @@ export default function Preparo1a1() {
           <Banner
             status="info"
             title="Ainda não há pauta gerada para esta pessoa"
-            description="O motor precisa de 1:1 processada para produzir assuntos. Processe as transcrições em Importações e a pauta aparece aqui."
+            /* A mensagem anterior mandava processar as transcricoes em
+               Importacoes. Elas JA estao processadas -- o que falta e o motor
+               de pauta ler o banco, que ainda nao foi ligado. Mandar o usuario
+               fazer algo que ja esta feito e pior que nao dizer nada. */
+            description="O registro e a transcricao desta pessoa ja estao no sistema e podem ser lidos em Registros de 1:1. O que ainda nao existe e o motor que transforma esse historico em assuntos sugeridos."
           />
         )}
 

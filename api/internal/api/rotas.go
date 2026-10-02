@@ -8,8 +8,10 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"teamcontrol/internal/models"
@@ -29,7 +31,15 @@ func Rotas(db *sql.DB, tenantID, userID int64) http.Handler {
 			erroJSON(w, http.StatusServiceUnavailable, "banco indisponível")
 			return
 		}
-		escreverJSON(w, map[string]any{"ok": true, "em": time.Now()})
+		// A pasta vai junto: o front tinha a mesma configuração duplicada, com um
+		// caminho de demonstração por padrão, e a tela de Importações exibia um
+		// diretório que não era o varrido. Fonte única é quem de fato varre.
+		escreverJSON(w, map[string]any{
+			"ok": true, "em": time.Now(),
+			// O caminho do HOST, não o do container: "/data/registros" não
+			// ajuda ninguém a achar o arquivo no Explorer.
+			"pasta": primeiroNaoVazio(os.Getenv("PASTA_REGISTROS_HOST"), os.Getenv("PASTA_REGISTROS")),
+		})
 	})
 
 	mux.HandleFunc("GET /api/pessoas", func(w http.ResponseWriter, r *http.Request) {
@@ -112,8 +122,39 @@ func Rotas(db *sql.DB, tenantID, userID int64) http.Handler {
 		escreverJSON(w, map[string]any{"ok": true, "gravadas": len(lista)})
 	})
 
+	mux.HandleFunc("GET /api/registros", func(w http.ResponseWriter, r *http.Request) {
+		lista, err := listarRegistros(r.Context(), db, tenantID)
+		if err != nil {
+			log.Printf("listar registros: %v", err)
+			erroJSON(w, http.StatusInternalServerError, "falha ao listar registros")
+			return
+		}
+		escreverJSON(w, lista)
+	})
+
+	// O detalhe é rota separada porque traz o texto: transcrição inteira,
+	// anotações e as três partes do registro. No índice isso seriam ~1 MB.
+	mux.HandleFunc("GET /api/registros/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, err := idDaURL(r.URL.Path)
+		if err != nil {
+			erroJSON(w, http.StatusBadRequest, "id inválido")
+			return
+		}
+		d, err := detalharRegistro(r.Context(), db, tenantID, id)
+		if errors.Is(err, sql.ErrNoRows) {
+			erroJSON(w, http.StatusNotFound, "registro não encontrado")
+			return
+		}
+		if err != nil {
+			log.Printf("detalhar registro %d: %v", id, err)
+			erroJSON(w, http.StatusInternalServerError, "falha ao abrir o registro")
+			return
+		}
+		escreverJSON(w, d)
+	})
+
 	mux.HandleFunc("GET /api/importacoes", func(w http.ResponseWriter, r *http.Request) {
-		arquivos, err := listarArquivos(r.Context(), db, tenantID, r.URL.Query().Get("status"))
+		arquivos, err := listarImportacoesFront(r.Context(), db, tenantID)
 		if err != nil {
 			log.Printf("listar importações: %v", err)
 			erroJSON(w, http.StatusInternalServerError, "falha ao listar importações")
@@ -168,4 +209,14 @@ func comLog(h http.Handler) http.Handler {
 		h.ServeHTTP(w, r)
 		log.Printf("%s %s %s", r.Method, r.URL.Path, time.Since(inicio).Round(time.Millisecond))
 	})
+}
+
+// primeiroNaoVazio devolve o primeiro valor preenchido.
+func primeiroNaoVazio(valores ...string) string {
+	for _, v := range valores {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

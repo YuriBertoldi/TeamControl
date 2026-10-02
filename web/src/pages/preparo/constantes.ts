@@ -1,11 +1,25 @@
 /** Vocabulário visual da pauta, compartilhado entre a linha e o detalhe. */
 
-import type { Prioridade } from '../../data/mock';
+import { PESSOAS, HOJE, diasEntre, type Prioridade } from '../../data/mock';
 import type { DotVariant, TokenCor } from '../../app/ListaDetalhe';
 
-/** Pessoa inicial da tela. O seletor troca em tempo de execução; no sistema
- * isto vem da rota /preparo/:slug. */
-export const SLUG_PADRAO = 'diego-nunes';
+/**
+ * Pessoa inicial da tela: quem está há mais tempo sem 1:1.
+ *
+ * Era uma constante com um slug fixo da base de demonstração. Com o cadastro
+ * real carregado esse slug deixou de existir, `porSlug` devolveu `undefined` e
+ * a tela inteira ficou branca — sem mensagem, sem pista do motivo.
+ *
+ * Calculado da lista de verdade, isso não pode mais acontecer: ou existe
+ * alguém e abre nessa pessoa, ou não existe ninguém e a tela diz isso.
+ * Devolve `null` quando não há liderado ativo.
+ */
+export function primeiroDaFila(): string | null {
+  const ativos = PESSOAS.filter((p) => p.status === 'ativo' || p.status === 'afastado');
+  if (ativos.length === 0) return null;
+  return [...ativos]
+    .sort((a, b) => diasEntre(b.ultima1a1, HOJE) - diasEntre(a.ultima1a1, HOJE))[0].slug;
+}
 
 export const DOT_PRIORIDADE: Record<Prioridade, DotVariant> = {
   alta: 'error', media: 'warning', baixa: 'neutral', escuta: 'success',

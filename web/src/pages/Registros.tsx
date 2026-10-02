@@ -27,10 +27,11 @@ import { List, ListItem } from '@astryxdesign/core/List';
 import { StatusDot } from '@astryxdesign/core/StatusDot';
 import { MessagesSquare, FileDown, FilterX, UserSearch } from 'lucide-react';
 
-import { Page, Filtros, Stats, Conf, corDaCadeira, rotuloCargo } from '../app/ui';
+import { Page, Filtros, Stats, Conf, corDaCadeira, rotuloCargo, PessoaNaoEncontrada } from '../app/ui';
 import { ListaDetalhe, Detalhe, Bloco, type LinhaEnxuta, type DotVariant } from '../app/ListaDetalhe';
 import { PESSOAS, souMeus, porSlug, nivelDe, HOJE, diasEntre, dataBR } from '../data/mock';
 import { REGISTROS, FEEDBACKS, type Registro1a1 } from '../data/registros';
+import { Conversa } from './registros/Conversa';
 import { useNavegacao } from '../app/navegacao';
 
 const ROTULO_PARTE: Record<string, string> = {
@@ -61,7 +62,7 @@ export default function Registros() {
     <Page
       titulo="Registros de 1:1"
       subtitulo={`${REGISTROS.length} conversas registradas de ${comRegistro.size} pessoas · ${FEEDBACKS.length} feedback avulso`}
-      largura={1240}
+      largura={1560}
     >
       <Stats itens={[
         { valor: REGISTROS.length, rotulo: 'registros' },
@@ -166,7 +167,7 @@ function PorPessoa() {
       <Card padding={0}>
         <ListaDetalhe
           itens={linhas}
-          larguraPainel={520}
+          larguraPainel={820}
           vazio="Nenhuma pessoa com esses filtros."
           detalhe={(l) => (
             <VStack gap={2}>
@@ -183,8 +184,14 @@ function PorPessoa() {
 
 function TimelineDaPessoa({ slug }: { slug: string }) {
   const p = porSlug(slug);
+  if (!p) return <PessoaNaoEncontrada slug={slug} />;
   const regs = registrosDe(slug);
   const fbs = feedbacksDe(slug);
+
+  // Uma conversa aberta por vez. Abrir varias carregaria varias transcricoes
+  // de 18 mil caracteres ao mesmo tempo, e a comparacao que interessa e entre
+  // o registro e a transcricao DA MESMA conversa, nao entre conversas.
+  const [abertaID, setAbertaID] = useState<number | null>(null);
 
   const enc = regs.reduce((s, r) => s + r.encaminhamentos, 0);
   const meus = regs.reduce((s, r) => s + r.meus, 0);
@@ -243,7 +250,11 @@ function TimelineDaPessoa({ slug }: { slug: string }) {
 
             <Divider label="Conversas" />
             <List density="balanced" hasDividers>
-              {regs.map((r) => <LinhaRegistro key={r.arquivo} r={r} />)}
+              {regs.map((r) => (
+                <LinhaRegistro key={r.id} r={r}
+                               aberta={abertaID === r.id}
+                               abrir={() => setAbertaID(abertaID === r.id ? null : r.id)} />
+              ))}
             </List>
           </>
         )}
@@ -269,10 +280,20 @@ function TimelineDaPessoa({ slug }: { slug: string }) {
   );
 }
 
-function LinhaRegistro({ r }: { r: Registro1a1 }) {
+function LinhaRegistro({ r, aberta, abrir }: {
+  r: Registro1a1; aberta?: boolean; abrir?: () => void;
+}) {
+  // Transcrição e anotações são coisas diferentes, e a distinção importa: uma
+  // é o que foi dito, a outra é o resumo que a ferramenta produziu. Só a
+  // primeira serve para citar trecho literal numa calibragem.
+  const transcricoes = r.fontes.filter((f) => f.kind === 'transcricao_bruta');
+  const notas = r.fontes.filter((f) => f.kind === 'notas_sumarizadas');
+
   return (
+    <>
     <ListItem
       label={dataBR(r.data)}
+      onClick={abrir}
       startContent={<StatusDot
         variant={r.prazosVagos === r.encaminhamentos && r.encaminhamentos > 0 ? 'warning' : 'success'}
         label={`${r.partes.length} partes`} />}
@@ -307,11 +328,31 @@ function LinhaRegistro({ r }: { r: Registro1a1 }) {
             {r.omitidoSaude > 0 && (
               <Token size="sm" color="red" label={`${r.omitidoSaude} saúde`} />
             )}
+            {/* O lastro da conversa. Sem isto a tela não dizia que havia
+                transcrição por trás do registro — e era a pergunta do usuário. */}
+            {transcricoes.map((f) => (
+              <Token key={f.id} size="sm" color="purple"
+                     label={`transcrição · ${f.falas} falas`} />
+            ))}
+            {notas.map((f) => (
+              <Token key={f.id} size="sm" color="cyan" label="anotações do Gemini" />
+            ))}
+            {r.divergencia && (
+              <Token size="sm" color="orange" label="data do arquivo diverge" />
+            )}
           </HStack>
-          <Text type="supporting">{r.fonte}</Text>
+          <Text type="supporting">
+            {aberta ? 'Clique para fechar' : 'Clique para abrir o registro e a transcrição'}
+          </Text>
         </VStack>
       }
     />
+    {aberta && (
+      <Card padding={4} variant="muted">
+        <Conversa r={r} />
+      </Card>
+    )}
+    </>
   );
 }
 
@@ -365,7 +406,7 @@ function TodosRegistros() {
           {visiveis.map((r) => (
             <ListItem
               key={r.arquivo}
-              label={`${dataBR(r.data)} · ${porSlug(r.slug).curto}`}
+              label={`${dataBR(r.data)} · ${porSlug(r.slug)?.curto ?? r.slug}`}
               startContent={<StatusDot variant="success" label={`${r.partes.length} partes`} />}
               endContent={<Text type="supporting">{r.duracao}</Text>}
               description={
