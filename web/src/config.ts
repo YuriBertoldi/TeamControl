@@ -13,6 +13,7 @@
 
 import { SQUADS_PADRAO, type Squad } from './data/squads';
 import { ler, escreverJSON, remover } from './data/armazenamento';
+import { sincronizar } from './data/origem';
 
 export interface PastaMonitorada {
   id: string;
@@ -87,6 +88,8 @@ export function carregarConfig(): Config {
 
 export function salvarConfig(c: Config): void {
   escreverJSON(CHAVE, c);
+  // Squads viajam dentro da config, mas no banco são tabela própria.
+  sincronizar('squads', c.squads);
 }
 
 export function limparConfig(): void {

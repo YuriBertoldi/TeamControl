@@ -7,6 +7,9 @@ const LayoutData = "2006-01-02"
 // mesesDesde conta meses cheios entre duas datas ISO. Usado no corte de
 // elegibilidade do ciclo: contar dias/30 erraria em fevereiro e em anos
 // bissextos, e esse corte decide quem entra na avaliação.
+// MesesEntre é o mesmo cálculo, exportado para a camada de API.
+func MesesEntre(de, ate string) int { return mesesDesde(de, ate) }
+
 func mesesDesde(de, ate string) int {
 	d, err1 := time.Parse(LayoutData, de)
 	a, err2 := time.Parse(LayoutData, ate)

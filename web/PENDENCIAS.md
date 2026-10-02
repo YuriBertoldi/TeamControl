@@ -86,12 +86,15 @@ Em ordem, do que está sendo feito para o que falta começar.
 
 ## Pendências anteriores que seguem abertas
 
-- [ ] **Frontend ligado ao backend.** O backend Go + PostgreSQL está de pé e
-      verificado (6 migrations, 32 tabelas, seed idempotente sobre a pasta), mas nenhuma tela consome `/api`: os dados de domínio são mock
-      e o que você cadastra vai para `localStorage`. Próximo passo é
-      `src/lib/api.ts` tipado, trocando `carregarPessoas` / `carregarTribos` /
-      `carregarCargos` / `carregarCiclos` / `carregarDNA` por leitura do banco,
-      mantendo a mesma assinatura.
+- [x] **Frontend ligado ao backend.**  + :
+      na subida,  busca pessoas, tribos e squads da API e preenche
+      o cache; as telas seguem lendo de forma síncrona. Gravação vai para o
+      cache e para o banco. Sem API, o sistema abre com o último estado
+      conhecido — e avisa no console quando uma gravação não chegou ao
+      Postgres, em vez de fingir que persistiu.
+      - [ ] Falta levar para a API: cargos, ciclos de AVD, DNA, avaliações,
+            compromissos e o acervo de registros. Hoje esses ainda vivem só no
+            navegador.
 - [ ] **Importador de `.xlsx` do DNA no backend.** Hoje a importação é por
       digitação dos 6 totais. O backend já monta a pasta; ler a planilha de
       cada pessoa direto do Drive elimina o passo manual.

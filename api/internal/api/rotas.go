@@ -38,13 +38,78 @@ func Rotas(db *sql.DB, tenantID, userID int64) http.Handler {
 			erroJSON(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		pessoas, err := listarPessoas(r.Context(), db, sc)
+		pessoas, err := listarPessoasFront(r.Context(), db, sc)
 		if err != nil {
 			log.Printf("listar pessoas: %v", err)
 			erroJSON(w, http.StatusInternalServerError, "falha ao listar pessoas")
 			return
 		}
 		escreverJSON(w, pessoas)
+	})
+
+	// PUT substitui a lista inteira, espelhando `salvarPessoas(lista)` da tela.
+	// Ver o comentário de topo de cadastro.go para o porquê e para a
+	// assimetria entre pessoa (nunca removida) e squad (removível).
+	mux.HandleFunc("PUT /api/pessoas", func(w http.ResponseWriter, r *http.Request) {
+		var lista []PessoaEntrada
+		if err := json.NewDecoder(r.Body).Decode(&lista); err != nil {
+			erroJSON(w, http.StatusBadRequest, "corpo inválido: "+err.Error())
+			return
+		}
+		if err := salvarPessoas(r.Context(), db, escopo(), lista); err != nil {
+			log.Printf("salvar pessoas: %v", err)
+			erroJSON(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		escreverJSON(w, map[string]any{"ok": true, "gravadas": len(lista)})
+	})
+
+	mux.HandleFunc("GET /api/tribos", func(w http.ResponseWriter, r *http.Request) {
+		tribos, err := listarTribos(r.Context(), db, escopo())
+		if err != nil {
+			log.Printf("listar tribos: %v", err)
+			erroJSON(w, http.StatusInternalServerError, "falha ao listar tribos")
+			return
+		}
+		escreverJSON(w, tribos)
+	})
+
+	mux.HandleFunc("PUT /api/tribos", func(w http.ResponseWriter, r *http.Request) {
+		var lista []TriboEntrada
+		if err := json.NewDecoder(r.Body).Decode(&lista); err != nil {
+			erroJSON(w, http.StatusBadRequest, "corpo inválido: "+err.Error())
+			return
+		}
+		if err := salvarTribos(r.Context(), db, escopo(), lista); err != nil {
+			log.Printf("salvar tribos: %v", err)
+			erroJSON(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		escreverJSON(w, map[string]any{"ok": true, "gravadas": len(lista)})
+	})
+
+	mux.HandleFunc("GET /api/squads", func(w http.ResponseWriter, r *http.Request) {
+		squads, err := listarSquads(r.Context(), db, escopo())
+		if err != nil {
+			log.Printf("listar squads: %v", err)
+			erroJSON(w, http.StatusInternalServerError, "falha ao listar squads")
+			return
+		}
+		escreverJSON(w, squads)
+	})
+
+	mux.HandleFunc("PUT /api/squads", func(w http.ResponseWriter, r *http.Request) {
+		var lista []SquadEntrada
+		if err := json.NewDecoder(r.Body).Decode(&lista); err != nil {
+			erroJSON(w, http.StatusBadRequest, "corpo inválido: "+err.Error())
+			return
+		}
+		if err := salvarSquads(r.Context(), db, escopo(), lista); err != nil {
+			log.Printf("salvar squads: %v", err)
+			erroJSON(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		escreverJSON(w, map[string]any{"ok": true, "gravadas": len(lista)})
 	})
 
 	mux.HandleFunc("GET /api/importacoes", func(w http.ResponseWriter, r *http.Request) {
@@ -57,7 +122,31 @@ func Rotas(db *sql.DB, tenantID, userID int64) http.Handler {
 		escreverJSON(w, arquivos)
 	})
 
-	return comLog(mux)
+	return comCORS(comLog(mux))
+}
+
+// comCORS libera o frontend de desenvolvimento, que roda noutra porta.
+//
+// A lista de origens é fechada em localhost de propósito: o sistema é local e
+// o dado é de RH. Um curinga aqui deixaria qualquer página aberta no navegador
+// ler a API enquanto ela estiver de pé.
+func comCORS(h http.Handler) http.Handler {
+	permitidas := map[string]bool{
+		"http://localhost:5180": true, "http://127.0.0.1:5180": true,
+		"http://localhost:4173": true, "http://127.0.0.1:4173": true,
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if origem := r.Header.Get("Origin"); permitidas[origem] {
+			w.Header().Set("Access-Control-Allow-Origin", origem)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		}
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
 }
 
 func escreverJSON(w http.ResponseWriter, v any) {

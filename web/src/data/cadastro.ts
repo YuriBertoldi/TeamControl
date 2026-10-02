@@ -14,6 +14,7 @@ import type { Pessoa, Familia } from './mock';
 import { PESSOAS_SEED } from './pessoas';
 import { TRIBOS_SEED, type Tribo } from './squads';
 import { lerJSON, escreverJSON, remover } from './armazenamento';
+import { sincronizar } from './origem';
 
 const CHAVE_PESSOAS = 'pessoas';
 const CHAVE_TRIBOS = 'tribos';
@@ -26,6 +27,7 @@ export function carregarPessoas(): Pessoa[] {
 
 export function salvarPessoas(lista: Pessoa[]): void {
   escreverJSON(CHAVE_PESSOAS, lista);
+  sincronizar('pessoas', lista);
 }
 
 export function restaurarPessoas(): Pessoa[] {
@@ -185,6 +187,7 @@ export function carregarTribos(): Tribo[] {
 
 export function salvarTribos(lista: Tribo[]): void {
   escreverJSON(CHAVE_TRIBOS, lista);
+  sincronizar('tribos', lista);
 }
 
 export function restaurarTribos(): Tribo[] {

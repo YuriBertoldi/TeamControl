@@ -649,4 +649,45 @@ var migrations = []migration{
 		   em          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		 )`,
 	}},
+
+	// v7 alinha o banco ao modelo de identificação que a interface usa.
+	//
+	// As telas trabalham com slug — string estável, escolhida por quem cadastra
+	// — e não com id gerado. Isso não é preferência: pauta, avaliação, matriz
+	// de skills e DNA referenciam pessoa por slug, e um id sequencial quebraria
+	// essas referências na primeira recarga.
+	//
+	// Tribo e squad ganham o mesmo tratamento, e squad passa a ter membros
+	// explícitos. A relação só por `people.squad_id` não comporta alguém em
+	// duas squads, que é situação real e que a tela já marca com "+1 squad".
+	{version: 7, name: "slugs_e_remuneracao", stmts: []string{
+		`ALTER TABLE tribos ADD COLUMN slug VARCHAR(60)`,
+		`UPDATE tribos SET slug = 'tribo-' || id WHERE slug IS NULL`,
+		`ALTER TABLE tribos ALTER COLUMN slug SET NOT NULL`,
+		`ALTER TABLE tribos ADD CONSTRAINT tribos_tenant_slug_key UNIQUE (tenant_id, slug)`,
+
+		`ALTER TABLE squads ADD COLUMN slug VARCHAR(60)`,
+		`UPDATE squads SET slug = 'squad-' || id WHERE slug IS NULL`,
+		`ALTER TABLE squads ALTER COLUMN slug SET NOT NULL`,
+		`ALTER TABLE squads ADD CONSTRAINT squads_tenant_slug_key UNIQUE (tenant_id, slug)`,
+
+		// As colunas por slug convivem com as FKs numéricas: as antigas seguem
+		// garantindo o isolamento entre tenants, as novas são o que a interface
+		// entende. Daí tribo_id deixar de ser obrigatória.
+		`ALTER TABLE squads ADD COLUMN tribo_slug VARCHAR(60)`,
+		`ALTER TABLE squads ADD COLUMN tech_lead_slug VARCHAR(60)`,
+		`ALTER TABLE squads ADD COLUMN membros TEXT[] NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE squads ALTER COLUMN tribo_id DROP NOT NULL`,
+
+		// A unicidade por nome impedia duas squads homônimas em tribos
+		// diferentes, que é arranjo legítimo. O slug passa a ser a chave.
+		`ALTER TABLE squads DROP CONSTRAINT IF EXISTS squads_tenant_id_nome_key`,
+
+		// Remuneração: confidencialidade 3. Não sai em relatório, export nem
+		// pacote para IA — a trava está no código. A coluna existe sobretudo
+		// pelo alerta de tempo sem reajuste, que é o dado de gestão que importa.
+		`ALTER TABLE people ADD COLUMN salario INTEGER`,
+		`ALTER TABLE people ADD COLUMN ultimo_reajuste DATE`,
+		`ALTER TABLE people ADD COLUMN faixa_salarial VARCHAR(60)`,
+	}},
 }
