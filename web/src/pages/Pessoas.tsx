@@ -15,7 +15,7 @@ import { FilterX, MessagesSquare, Sparkles, UserSearch } from 'lucide-react';
 
 import { Page, Filtros } from '../app/ui';
 import { ListaDetalhe, Detalhe, Bloco, type LinhaEnxuta } from '../app/ListaDetalhe';
-import { PESSOAS, souMeus, timeDe, DNA, HOJE, diasEntre, dataBR, type Pessoa } from '../data/mock';
+import { PESSOAS, souMeus, timeDe, DNA, diasDesde, SEM_REGISTRO, dataBR, type Pessoa } from '../data/mock';
 import { carregarTribos } from '../data/cadastro';
 import { useNavegacao } from '../app/navegacao';
 import { carregarConfig } from '../config';
@@ -41,25 +41,40 @@ export default function Pessoas() {
       if (quadrante && p.quadrante !== quadrante) return false;
       if (situacao === 'elegivel' && !p.elegivel) return false;
       if (situacao === 'fora' && p.elegivel) return false;
-      if (situacao === 'atrasado' && diasEntre(p.ultima1a1, HOJE) <= limite) return false;
+      // Sem 1:1 registrada não é "atrasado": é outro problema, e tem filtro
+      // próprio. Misturar os dois esconde quem nunca teve conversa nenhuma.
+      if (situacao === 'atrasado') {
+        const d = diasDesde(p.ultima1a1);
+        if (d === null || d <= limite) return false;
+      }
       if (situacao === 'tl' && !p.techLead) return false;
       return true;
     })
     .map((p) => {
-      const dias = diasEntre(p.ultima1a1, HOJE);
-      const atrasado = p.status === 'ativo' && dias > limite;
+      const dias = diasDesde(p.ultima1a1);
+      const atrasado = p.status === 'ativo' && dias !== null && dias > limite;
+      const semRegistro = p.status === 'ativo' && dias === null;
       return {
         id: p.slug,
         titulo: p.nome,
-        dot: p.status === 'desligado' ? 'neutral' : atrasado ? 'error' : 'success',
-        dotLabel: p.status === 'desligado' ? 'Desligado' : atrasado ? '1:1 atrasada' : 'Em dia',
+        dot: p.status === 'desligado' ? 'neutral'
+           : atrasado ? 'error' : semRegistro ? 'warning' : 'success',
+        dotLabel: p.status === 'desligado' ? 'Desligado'
+                : atrasado ? '1:1 atrasada'
+                : semRegistro ? 'Sem 1:1 registrada' : 'Em dia',
         marcadores: [
+          // Não ter quadrante e estar fora do ciclo são coisas diferentes, e a
+          // tela dizia "fora do ciclo" para as duas. Quem é elegível e ainda
+          // não foi posicionado no 9-box é tarefa SUA pendente — não alguém
+          // que o ciclo dispensou.
           p.quadrante
             ? { texto: p.quadrante, cor: 'blue' as const }
-            : { texto: 'fora do ciclo', cor: 'red' as const },
+            : p.elegivel
+              ? { texto: 'sem 9-box', cor: 'orange' as const }
+              : { texto: 'fora do ciclo', cor: 'red' as const },
           ...(p.techLead ? [{ texto: 'Tech Lead', cor: 'purple' as const }] : []),
         ],
-        valor: `${dias}d`,
+        valor: dias === null ? SEM_REGISTRO : `${dias}d`,
         p,
       };
     }), [busca, time, quadrante, situacao, limite]);
@@ -105,7 +120,8 @@ export default function Pessoas() {
           larguraPainel={420}
           detalhe={(l) => {
             const p = l.p;
-            const dias = diasEntre(p.ultima1a1, HOJE);
+            const dias = diasDesde(p.ultima1a1);
+            const casa = diasDesde(p.admissao);
             const dna = DNA[p.slug];
             return (
               <Detalhe
@@ -124,13 +140,19 @@ export default function Pessoas() {
                             description={p.motivoInelegivel} />
                   )}
 
-                  <Bloco rotulo="Squad">{timeDe(p.time).nome}</Bloco>
+                  {/* `p.time` é a TRIBO, não a squad — o rótulo dizia "Squad" e
+                      mostrava "Quinto dia Útil", que é tribo de três squads. */}
+                  <Bloco rotulo="Tribo">{timeDe(p.time).nome}</Bloco>
                   <Bloco rotulo="Admissão">
-                    {`${dataBR(p.admissao)} · ${Math.floor(
-                      diasEntre(p.admissao, HOJE) / 365)} anos de casa`}
+                    {casa === null
+                      ? 'sem data de admissão'
+                      : `${dataBR(p.admissao)} · ${Math.floor(casa / 365)} anos de casa`}
                   </Bloco>
                   <Bloco rotulo="Última 1:1">
-                    {`${dataBR(p.ultima1a1)} · há ${dias} dias${dias > limite ? ' — fora da cadência' : ''}`}
+                    {dias === null
+                      ? 'sem 1:1 registrada'
+                      : `${dataBR(p.ultima1a1)} · há ${dias} dias${
+                          dias > limite ? ' — fora da cadência' : ''}`}
                   </Bloco>
 
                   <Bloco rotulo="Trajetória 2026">

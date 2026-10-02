@@ -47,3 +47,12 @@ desktop.ini
 .idea/
 .vscode/
 !.vscode/extensions.json
+
+# Scripts de carga com dados reais de pessoas.
+#
+# Uma carga nomeia liderado, cargo, nivel e squad — e isso e dado, nao codigo.
+# Os scripts de verdade moram em teamcontrol-privado/scripts-carga/, que nao
+# tem remote. A regra abaixo existe para o caso de alguem recriar um aqui:
+# e barato, e o custo de errar e publicar nome de gente num repo publico.
+carregar-*.cjs
+seed-*.cjs

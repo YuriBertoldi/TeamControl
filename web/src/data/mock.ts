@@ -198,6 +198,28 @@ export function diasEntre(a: string, b: string): number {
   return Math.round((+new Date(b) - +new Date(a)) / 86400000);
 }
 
+/**
+ * Dias desde uma data, ou `null` quando não há data registrada.
+ *
+ * Existe porque "não tem data" é um estado real e frequente: pessoa recém
+ * trazida para a coordenação ainda sem admissão preenchida, liderado que
+ * nunca teve 1:1 registrada. Jogando isso em `diasEntre` sai `NaN`, que a
+ * tela imprimia como **"NaNd"** e "NaN anos de casa".
+ *
+ * Pior que o texto feio: `NaN > limite` é `false`, então quem nunca teve 1:1
+ * aparecia como **"Em dia"** — exatamente o contrário do que o coordenador
+ * precisa ver. Devolver `null` obriga quem chama a decidir o que fazer, e o
+ * compilador cobra.
+ */
+export function diasDesde(data: string, hoje = HOJE): number | null {
+  if (!data) return null;
+  const n = diasEntre(data, hoje);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Como "sem registro" aparece na tela. Um traço, nunca um número inventado. */
+export const SEM_REGISTRO = '—';
+
 /** Valor em reais. Usado só em superfícies de confidencialidade 3. */
 export const moeda = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL',
