@@ -141,7 +141,7 @@ export default function Pessoas() {
                   )}
 
                   {/* `p.time` é a TRIBO, não a squad — o rótulo dizia "Squad" e
-                      mostrava "Quinto dia Útil", que é tribo de três squads. */}
+                      mostrava o nome da tribo, que agrupa várias squads. */}
                   <Bloco rotulo="Tribo">{timeDe(p.time).nome}</Bloco>
                   <Bloco rotulo="Admissão">
                     {casa === null
