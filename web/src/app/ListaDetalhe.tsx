@@ -86,7 +86,7 @@ export function ListaDetalhe<T extends LinhaEnxuta>({
         </LayoutContent>
       }
       end={
-        <LayoutPanel width={larguraPainel} hasDivider padding={3} label="Detalhe do item">
+        <LayoutPanel width={larguraPainel} hasDivider padding={4} label="Detalhe do item">
           {atual ? detalhe(atual) : <Text type="supporting">Selecione um item.</Text>}
         </LayoutPanel>
       }

@@ -14,10 +14,16 @@ export function Page({ titulo, subtitulo, acoes, children, largura = 1080 }: {
   titulo: string; subtitulo?: string; acoes?: ReactNode; children: ReactNode; largura?: number;
 }) {
   return (
-    <VStack hAlign="center" padding={4} isScrollable height="100%">
-      <VStack gap={3} width="100%" maxWidth={largura}>
-        <HStack gap={2} vAlign="center" wrap="wrap" hAlign="between">
-          <VStack gap={0.5}>
+    // padding 5 e gap 5: a tela é densa de informação, e densidade sem respiro
+    // vira parede. Com 16px entre blocos, legenda, chips, estatísticas e
+    // treemap se liam como uma massa só — o ar entre eles é o que deixa varrer
+    // a página em vez de ler linha a linha.
+    <VStack hAlign="center" padding={5} isScrollable height="100%">
+      <VStack gap={5} width="100%" maxWidth={largura}>
+        <HStack gap={2} vAlign="end" wrap="wrap" hAlign="between" paddingBlockEnd={1}>
+          {/* O subtítulo para de esticar até a borda: linha longa demais é
+              cansativa de ler e empurra as ações para a linha de baixo. */}
+          <VStack gap={0.5} maxWidth={680}>
             <Heading level={1}>{titulo}</Heading>
             {subtitulo && <Text type="supporting">{subtitulo}</Text>}
           </VStack>
@@ -30,7 +36,6 @@ export function Page({ titulo, subtitulo, acoes, children, largura = 1080 }: {
   );
 }
 
-/** Barra de filtros: sempre acima do conteúdo, sempre com a contagem do resultado. */
 /**
  * Barra de filtros.
  *
@@ -52,9 +57,9 @@ export function Page({ titulo, subtitulo, acoes, children, largura = 1080 }: {
  */
 export function Filtros({ children, resultado }: { children: ReactNode; resultado: string }) {
   return (
-    <Card padding={2} variant="muted">
-      <HStack gap={2} wrap="wrap" vAlign="end" hAlign="between">
-        <HStack gap={2} wrap="wrap" vAlign="end">{children}</HStack>
+    <Card padding={4} variant="muted">
+      <HStack gap={3} wrap="wrap" vAlign="end" hAlign="between">
+        <HStack gap={3} wrap="wrap" vAlign="end">{children}</HStack>
         <Text type="supporting" hasTabularNumbers>{resultado}</Text>
       </HStack>
     </Card>
@@ -89,7 +94,7 @@ export function Metrica({ valor, rotulo, nota, cor }: {
   cor?: 'red' | 'orange' | 'green' | 'blue';
 }) {
   return (
-    <Card padding={3} variant={cor ? cor : 'default'}>
+    <Card padding={4} variant={cor ? cor : 'default'}>
       <VStack gap={0.5}>
         <Heading level={2}>{valor}</Heading>
         <Text type="label">{rotulo}</Text>

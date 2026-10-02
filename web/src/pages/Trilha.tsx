@@ -90,7 +90,7 @@ export default function Trilha() {
       {verNiveis ? (
         <VStack gap={2}>
           {TRILHA.map((n) => (
-            <Card key={n.id} padding={3}
+            <Card key={n.id} padding={4}
                   variant={n.saidaValida ? 'green' : 'default'}>
               <VStack gap={1.5}>
                 <HStack gap={2} vAlign="center" wrap="wrap">

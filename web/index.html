@@ -1,10 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TeamControl</title>
+
+    <!--
+      O Astryx nomeia a família nos tokens, mas nunca carrega arquivo de fonte.
+      Sem isto o tema pedia "Fustat" e caía no system-ui, que em telas densas
+      fica com desenho pesado e espaçamento irregular.
+
+      Inter é a escolha: desenhada para interface, com altura de x generosa e
+      números tabulares — o que importa numa tela cheia de contagem.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300..700&display=swap"
+    />
   </head>
   <body>
     <div id="root"></div>

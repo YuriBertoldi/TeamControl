@@ -112,7 +112,7 @@ export default function PDI() {
             const marcos = plano.objetivos.flatMap((o) => o.marcos);
             const feitos = marcos.filter((m) => m.status === 'concluido').length;
             return (
-              <Card key={plano.slug} padding={3}>
+              <Card key={plano.slug} padding={4}>
                 <VStack gap={2}>
                   <HStack gap={2} vAlign="center" wrap="wrap">
                     <Heading level={3}>{pessoa.nome}</Heading>

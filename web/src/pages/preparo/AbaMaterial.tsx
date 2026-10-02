@@ -31,7 +31,7 @@ export function AbaMaterial({ SLUG }: { SLUG: string }) {
 
   return (
     <VStack gap={3}>
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>O que EU prometi</Heading>
           <Text type="supporting">
@@ -43,7 +43,7 @@ export function AbaMaterial({ SLUG }: { SLUG: string }) {
         </VStack>
       </Card>
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>O que ficou com ele</Heading>
           <List density="compact" hasDividers>
@@ -96,7 +96,7 @@ function Temas({ SLUG }: { SLUG: string }) {
   const t = TEMAS[SLUG];
   if (!t) return null;
   return (
-    <Card padding={3}>
+    <Card padding={4}>
       <VStack gap={2}>
         <Heading level={3}>Temas recorrentes</Heading>
         <List density="compact" hasDividers>
@@ -148,7 +148,7 @@ function ProximaConversa({ SLUG }: { SLUG: string }) {
   const pc = PROXIMA_CONVERSA[SLUG];
   if (!pc) return null;
   return (
-    <Card padding={3}>
+    <Card padding={4}>
       <VStack gap={2}>
         <Heading level={3}>“Para a próxima conversa”</Heading>
         <Text type="supporting">
@@ -166,7 +166,7 @@ function Skills({ SLUG }: { SLUG: string }) {
   const skills = SKILLS_GAP[SLUG];
   if (!skills?.length) return null;
   return (
-    <Card padding={3}>
+    <Card padding={4}>
       <VStack gap={2}>
         <Heading level={3}>Skills</Heading>
         <Text type="supporting">só o que mudou e o que incomoda</Text>
@@ -203,7 +203,7 @@ function Novidades({ SLUG }: { SLUG: string }) {
   const novidades = NOVIDADES[SLUG];
   if (!novidades?.length) return null;
   return (
-    <Card padding={3}>
+    <Card padding={4}>
       <VStack gap={2}>
         <Heading level={3}>Desde a última conversa</Heading>
         <List density="compact" hasDividers>
@@ -236,7 +236,7 @@ function Pessoa({ SLUG }: { SLUG: string }) {
   const dna = DNA[SLUG];
   if (!dna) return null;
   return (
-    <Card padding={3}>
+    <Card padding={4}>
       <VStack gap={2}>
         <HStack gap={2} vAlign="center" wrap="wrap">
           <Heading level={3}>Pessoa</Heading>

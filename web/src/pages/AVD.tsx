@@ -140,7 +140,7 @@ export default function AVDPage() {
         />
       )}
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <HStack gap={2} vAlign="center" wrap="wrap">
             <Heading level={3}>9-box</Heading>
@@ -198,13 +198,13 @@ export default function AVDPage() {
       </Card>
 
       {atual && (
-        <Card padding={3}>
+        <Card padding={4}>
           <DetalheAvaliacao a={atual} ciclo={CICLO} escala={ESCALA} bloqueado={bloqueado} />
         </Card>
       )}
 
       {quadranteFiltro && (
-        <Card padding={3}>
+        <Card padding={4}>
           <VStack gap={2}>
             <Heading level={3}>{quadranteFiltro}</Heading>
             <List density="compact" hasDividers>

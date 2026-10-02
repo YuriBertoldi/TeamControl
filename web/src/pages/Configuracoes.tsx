@@ -66,7 +66,7 @@ export default function Configuracoes() {
                 isDismissable onDismiss={() => setSalvo(false)} />
       )}
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <HStack gap={2} vAlign="center" wrap="wrap">
             <Heading level={3}>Pastas monitoradas</Heading>
@@ -105,7 +105,7 @@ export default function Configuracoes() {
         </VStack>
       </Card>
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>Ingestão</Heading>
           <HStack gap={2} wrap="wrap" vAlign="start">
@@ -126,7 +126,7 @@ export default function Configuracoes() {
         </VStack>
       </Card>
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>Export e versionamento</Heading>
           <TextInput
@@ -137,7 +137,7 @@ export default function Configuracoes() {
         </VStack>
       </Card>
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>Limiares</Heading>
           <HStack gap={2} wrap="wrap" vAlign="start">
@@ -156,7 +156,7 @@ export default function Configuracoes() {
         </VStack>
       </Card>
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>De onde cada valor vem</Heading>
           <Divider />

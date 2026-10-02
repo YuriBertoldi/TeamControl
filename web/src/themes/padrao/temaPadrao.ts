@@ -152,10 +152,93 @@ function rampa(base: string) {
   return escala;
 }
 
+/**
+ * Tipografia — era o que mais pesava na tela.
+ *
+ * O tema base veio de um tema de display: `ratio: 1.25`, que é a escala
+ * "dramática", e h3/h4 em **negrito**. Como h3 é o título de todo card, quase
+ * tudo gritava — e, quando tudo grita, a hierarquia some: não dá para varrer
+ * a coluna procurando o que importa.
+ *
+ * As três mudanças:
+ *
+ * 1. **`ratio` 1.25 → 1.125**, a escala densa da documentação do Astryx. É a
+ *    certa aqui: a ferramenta é de leitura em varredura, não landing page.
+ *    Com 1.25 o h1 ficava quase o dobro do corpo e empurrava tudo para baixo.
+ * 2. **Pesos.** h1 e h2 em semibold, h3 a h6 em medium. Título de card passa a
+ *    se distinguir por tamanho e cor, não por espessura.
+ * 3. **`base` 16 → 15.** Um ponto a menos devolve espaço sem custar
+ *    legibilidade, e é o bastante para caber mais uma linha por card.
+ *
+ * A família é Inter, carregada no index.html — o Astryx nomeia a fonte nos
+ * tokens mas nunca busca o arquivo, e sem o `<link>` isto cai no system-ui.
+ */
+const PILHA =
+  'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+
+/**
+ * Escala recalculada: base 15px, razão 1,2.
+ *
+ * A do tema base era 16 / 1,25 — a razão "dramática", feita para display. Numa
+ * tela de varredura ela compõe rápido demais: o h1 chegava a 31px e os passos
+ * pequenos despencavam para 5px, inúteis. Com 1,2 a diferença entre níveis
+ * continua legível e nada estoura.
+ *
+ * Os valores vão escritos, e não calculados, porque `typography` só é lida
+ * quando o tema é compilado por `defineTheme`. Este tema espalha outro já
+ * pronto, então a escala precisa chegar como token — que vence o que foi
+ * gerado antes.
+ */
+const escalaFonte = {
+  '--font-size-4xs': '0.375rem',  //  6px
+  '--font-size-3xs': '0.4375rem', //  7px
+  '--font-size-2xs': '0.5625rem', //  9px
+  '--font-size-xs': '0.625rem',   // 10px
+  '--font-size-sm': '0.8125rem',  // 13px
+  '--font-size-base': '0.9375rem', // 15px — o corpo
+  '--font-size-lg': '1.125rem',   // 18px
+  '--font-size-xl': '1.375rem',   // 22px
+  '--font-size-2xl': '1.625rem',  // 26px — título de página
+  '--font-size-3xl': '1.9375rem', // 31px
+  '--font-size-4xl': '2.3125rem', // 37px
+  '--font-size-5xl': '2.8125rem', // 45px
+  '--font-family-body': PILHA,
+  '--font-family-heading': PILHA,
+};
+
+/**
+ * Pesos de título.
+ *
+ * O tema base punha h3 e h4 em **bold**, e h3 é o título de todo card. O
+ * resultado era uma tela em que quase tudo gritava — e, quando tudo grita, a
+ * hierarquia some: não dá para varrer a coluna procurando o que importa.
+ *
+ * Aqui o título se distingue por tamanho e cor, não por espessura. O peso vem
+ * de classe atômica do StyleX, não de variável CSS, então a troca precisa ser
+ * override de componente e não token.
+ */
+const pesosDeTitulo = {
+  heading: {
+    'level:1': { fontWeight: 'var(--font-weight-semibold)', letterSpacing: '-0.015em' },
+    'level:2': { fontWeight: 'var(--font-weight-semibold)', letterSpacing: '-0.01em' },
+    'level:3': { fontWeight: 'var(--font-weight-medium)' },
+    'level:4': { fontWeight: 'var(--font-weight-medium)' },
+    'level:5': { fontWeight: 'var(--font-weight-medium)' },
+    'level:6': { fontWeight: 'var(--font-weight-medium)' },
+  },
+  // Rótulo e texto de apoio ficam um passo mais leves: eles emolduram o dado,
+  // não competem com ele.
+  text: {
+    'type:label': { fontWeight: 'var(--font-weight-medium)' },
+    'type:supporting': { lineHeight: '1.5' },
+  },
+};
+
 export const temaPadrao = {
   ...gothicTheme,
   name: 'teamcontrol',
-  tokens,
+  tokens: { ...tokens, ...escalaFonte },
+  components: { ...gothicTheme.components, ...pesosDeTitulo },
   green: rampa(FIN.receita),
   teal: rampa(FIN.receitaClara),
   red: rampa(FIN.despesa),

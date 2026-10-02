@@ -79,7 +79,7 @@ function Perguntas({ slug, aoSalvar }: { slug: string; aoSalvar: () => void }) {
 
   return (
     <VStack gap={2}>
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={1.5}>
           <Heading level={3}>DNA Motivacional de {p.curto}</Heading>
           <Text type="supporting">
@@ -115,7 +115,7 @@ function Perguntas({ slug, aoSalvar }: { slug: string; aoSalvar: () => void }) {
         );
       })}
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <HStack gap={2} wrap="wrap" vAlign="end">
             <TextInput label="Data da leitura (AAAA-MM-DD)" value={data} onChange={setData} />
@@ -177,7 +177,7 @@ function ImportarTotais({ slug, aoSalvar }: { slug: string; aoSalvar: () => void
         description="É a linha de soma logo abaixo das 21 questões, com um número por coluna (A a F). Seis números e pronto — não é preciso refazer o questionário."
       />
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <HStack gap={2} vAlign="center">
             <Table2 size={16} />

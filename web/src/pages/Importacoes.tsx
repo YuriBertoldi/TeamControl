@@ -220,7 +220,7 @@ export default function Importacoes() {
 
       {aba === 'entrada' && (
         <VStack gap={3}>
-          <Card padding={3}>
+          <Card padding={4}>
             <VStack gap={2}>
               <Heading level={3}>Enviar arquivos</Heading>
               <FileInput
@@ -237,7 +237,7 @@ export default function Importacoes() {
             </VStack>
           </Card>
 
-          <Card padding={3}>
+          <Card padding={4}>
             <VStack gap={2}>
               <Heading level={3}>Colar texto</Heading>
               <TextInput label="Transcrição ou anotações" isLabelHidden
@@ -249,7 +249,7 @@ export default function Importacoes() {
             </VStack>
           </Card>
 
-          <Card padding={3}>
+          <Card padding={4}>
             <VStack gap={2}>
               <HStack gap={2} vAlign="center" wrap="wrap">
                 <Heading level={3}>Pastas monitoradas</Heading>

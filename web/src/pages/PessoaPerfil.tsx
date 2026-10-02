@@ -89,7 +89,7 @@ export default function PessoaPerfil({ slug }: { slug: string }) {
         </HStack>
       }
     >
-      <Card padding={3}>
+      <Card padding={4}>
         <HStack gap={3} vAlign="center" wrap="wrap">
           <Avatar name={p.nome} size="lg" />
           <VStack gap={1}>
@@ -170,7 +170,7 @@ function Geral({ slug }: { slug: string }) {
         />
       )}
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>Trajetória</Heading>
           {p.trajetoria.length === 0
@@ -192,7 +192,7 @@ function Geral({ slug }: { slug: string }) {
       </Card>
 
       {temas && (
-        <Card padding={3}>
+        <Card padding={4}>
           <VStack gap={2}>
             <Heading level={3}>Temas das conversas</Heading>
             <List density="compact" hasDividers>
@@ -224,7 +224,7 @@ function Geral({ slug }: { slug: string }) {
       <Remuneracao slug={slug} />
 
       {dna && (
-        <Card padding={3}>
+        <Card padding={4}>
           <VStack gap={2}>
             <Heading level={3}>Leitura qualitativa</Heading>
             <Bloco rotulo="Como dar feedback">
@@ -258,7 +258,7 @@ function Remuneracao({ slug }: { slug: string }) {
 
   if (!p.salario && !p.ultimoReajuste) {
     return (
-      <Card padding={3}>
+      <Card padding={4}>
         <HStack gap={2} vAlign="center" wrap="wrap" hAlign="between">
           <VStack gap={0.5}>
             <Heading level={3}>Remuneração</Heading>
@@ -278,7 +278,7 @@ function Remuneracao({ slug }: { slug: string }) {
   const parado = meses !== null && meses >= 12;
 
   return (
-    <Card padding={3}>
+    <Card padding={4}>
       <VStack gap={2}>
         <HStack gap={2} vAlign="center" wrap="wrap" hAlign="between">
           <HStack gap={2} vAlign="center" wrap="wrap">
@@ -357,7 +357,7 @@ function AbaDNA({ slug }: { slug: string }) {
 
   return (
     <VStack gap={3}>
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <HStack gap={2} vAlign="center" wrap="wrap" hAlign="between">
             <HStack gap={2} vAlign="center" wrap="wrap">
@@ -428,7 +428,7 @@ function AbaDNA({ slug }: { slug: string }) {
 
       {ap.perfil && (
         <HStack gap={3} wrap="wrap" vAlign="stretch">
-          <Card padding={3} width="48%">
+          <Card padding={4} width="48%">
             <VStack gap={1.5}>
               <Heading level={3}>Motiva</Heading>
               <List density="compact" hasDividers>
@@ -439,7 +439,7 @@ function AbaDNA({ slug }: { slug: string }) {
               </List>
             </VStack>
           </Card>
-          <Card padding={3} width="48%">
+          <Card padding={4} width="48%">
             <VStack gap={1.5}>
               <Heading level={3}>Desmotiva</Heading>
               <List density="compact" hasDividers>
@@ -453,7 +453,7 @@ function AbaDNA({ slug }: { slug: string }) {
         </HStack>
       )}
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>O que isso muda na sua conduta</Heading>
           <Text type="supporting">
@@ -471,7 +471,7 @@ function AbaDNA({ slug }: { slug: string }) {
       </Card>
 
       {ap.perfil && (
-        <Card padding={3}>
+        <Card padding={4}>
           <VStack gap={2}>
             <Heading level={3}>Como ela atinge metas</Heading>
             <List density="balanced" hasDividers>
@@ -485,7 +485,7 @@ function AbaDNA({ slug }: { slug: string }) {
       )}
 
       {hist.length > 1 && (
-        <Card padding={3}>
+        <Card padding={4}>
           <VStack gap={2}>
             <Heading level={3}>Histórico de leituras</Heading>
             <Text type="supporting">
@@ -586,7 +586,7 @@ function Conversas({ slug }: { slug: string }) {
       </Card>
 
       {fbs.length > 0 && (
-        <Card padding={3}>
+        <Card padding={4}>
           <VStack gap={2}>
             <Heading level={3}>Feedbacks avulsos</Heading>
             <List density="compact" hasDividers>
@@ -634,7 +634,7 @@ function AbaSkills({ slug }: { slug: string }) {
         />
       )}
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <HStack gap={2} vAlign="center" wrap="wrap">
             <Heading level={3}>Skills da cadeira</Heading>
@@ -677,7 +677,7 @@ function AbaSkills({ slug }: { slug: string }) {
       </Card>
 
       {extras.length > 0 && (
-        <Card padding={3}>
+        <Card padding={4}>
           <VStack gap={1.5}>
             <Heading level={3}>Fora da cadeira</Heading>
             <Text type="supporting">
@@ -747,7 +747,7 @@ function AbaAVD({ slug, avaliacao }: {
 
   return (
     <VStack gap={2}>
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={1.5}>
           <HStack gap={2} vAlign="center" wrap="wrap">
             <Heading level={3}>{ciclo.nome}</Heading>
@@ -774,7 +774,7 @@ function AbaAVD({ slug, avaliacao }: {
         </VStack>
       </Card>
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>Comportamento</Heading>
           {eixo(ciclo.driversComportamento, avaliacao.comportamento, avaliacao.semEvidenciaComp, 0)}
@@ -810,7 +810,7 @@ function Desenvolvimento({ qa, pdi }: {
       )}
 
       {pdi && (
-        <Card padding={3}>
+        <Card padding={4}>
           <VStack gap={2}>
             <Heading level={3}>PDI · ciclo {pdi.ciclo}</Heading>
             {pdi.objetivos.map((o) => (
@@ -840,7 +840,7 @@ function Desenvolvimento({ qa, pdi }: {
       )}
 
       {qa && (
-        <Card padding={3}>
+        <Card padding={4}>
           <VStack gap={2}>
             <HStack gap={2} vAlign="center" wrap="wrap">
               <Heading level={3}>Trilha QA → Dev</Heading>
@@ -883,7 +883,7 @@ function Desenvolvimento({ qa, pdi }: {
       )}
 
       {!qa && !pdi && (
-        <Card padding={3}>
+        <Card padding={4}>
           <HStack gap={2} vAlign="center">
             <Sparkles size={16} />
             <Text type="supporting">

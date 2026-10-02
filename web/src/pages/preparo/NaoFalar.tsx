@@ -24,7 +24,7 @@ export function NaoFalar({ SLUG }: { SLUG: string }) {
   const nf = NAO_FALAR[SLUG];
   if (!nf) return null;
   return (
-    <Card padding={3}>
+    <Card padding={4}>
       <Collapsible defaultIsOpen={false} trigger={<Heading level={3}>O que não falar</Heading>}>
         <VStack gap={2} paddingBlockStart={2}>
           <Banner status="error" title="Restrição do ciclo vigente" description={nf.cicloVigente} />

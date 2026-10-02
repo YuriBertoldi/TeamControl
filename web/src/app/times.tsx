@@ -103,9 +103,9 @@ export function LegendaFamilias({ pessoas, ocultos, alternar }: {
   const familias = ORDEM_FAMILIA.filter((f) => pessoas.some((p) => p.familia === f));
 
   return (
-    <Card padding={2}>
-      <VStack gap={1.5}>
-        <HStack gap={2} wrap="wrap" vAlign="start">
+    <Card padding={3}>
+      <VStack gap={2}>
+        <HStack gap={3} wrap="wrap" vAlign="start">
           {familias.map((familia) => {
             const daFamilia = pessoas.filter((p) => p.familia === familia);
             const niveis = ORDEM_NIVEL.filter(
@@ -272,7 +272,7 @@ export function BlocoTribo({ tribo, pessoas, squads, aoClicar, detalhado = true 
     .filter((x) => x.n > 0);
 
   return (
-    <VStack gap={1.5}>
+    <VStack gap={2}>
       <HStack gap={2} vAlign="center" wrap="wrap" hAlign="between">
         <HStack gap={2} vAlign="center">
           <Avatar name={tribo.nome} size="md" />
@@ -298,7 +298,7 @@ export function BlocoTribo({ tribo, pessoas, squads, aoClicar, detalhado = true 
       <BarraCadeiras cadeiras={cadeirasDe(daTribo)} altura={16} />
 
       {detalhado && (
-        <HStack gap={1.5} wrap="wrap" vAlign="stretch">
+        <HStack gap={2} wrap="wrap" vAlign="stretch">
           {daSquad.map((s) => {
             const membros = daTribo.filter((p) => s.membros.includes(p.slug));
             if (membros.length === 0) return null;
@@ -351,8 +351,11 @@ function CardSquad({ squad, membros, tribo, squads, aoClicar }: {
     squads.filter((s) => s.membros.includes(slug)).length;
 
   return (
-    <Card padding={2} width="31%" minHeight={160}>
-      <VStack gap={1}>
+    // padding 3 e gap 2: é o card com mais informação da tela, e era o que mais
+    // sofria com aperto — nome, responsáveis, chips e uma linha por pessoa
+    // empilhados com 4px entre si viram um bloco de texto só.
+    <Card padding={3} width="31%" minHeight={160}>
+      <VStack gap={2}>
         <HStack gap={1} vAlign="center" wrap="wrap" hAlign="between">
           <Text type="label">{squad.nome}</Text>
           <Heading level={2}>{membros.length}</Heading>
@@ -361,7 +364,9 @@ function CardSquad({ squad, membros, tribo, squads, aoClicar }: {
 
         <BarraCadeiras cadeiras={cadeirasDe(membros)} altura={8} />
 
-        <VStack gap={0}>
+        {/* Quem responde pela squad fica junto, mas não colado: as três linhas
+            são do mesmo assunto, e meio passo entre elas basta para separá-las. */}
+        <VStack gap={0.5}>
           {tl && (
             <Text type="supporting">
               <Text type="label">Tech Lead:</Text> {tl.nome}
@@ -394,7 +399,7 @@ function CardSquad({ squad, membros, tribo, squads, aoClicar }: {
         </HStack>
 
         {familias.map(({ f, gente }) => (
-          <VStack key={f} gap={0.5}>
+          <VStack key={f} gap={1}>
             <HStack gap={0.5} vAlign="center">
               <Quadrinho cor={corFamilia(f)} />
               <Text type="label">{f.toUpperCase()} · {gente.length}</Text>

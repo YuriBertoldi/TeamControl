@@ -133,7 +133,7 @@ export default function Painel({ ir }: { ir: (r: RotaId) => void }) {
 
       {/* Quem está fora da cadência, em uma linha por pessoa. */}
       {atrasados.length > 0 && (
-        <Card padding={3}>
+        <Card padding={4}>
           <VStack gap={2}>
             <Heading level={3}>Fora da cadência de {limite} dias</Heading>
             <List density="compact" hasDividers>
@@ -161,7 +161,7 @@ export default function Painel({ ir }: { ir: (r: RotaId) => void }) {
         </Card>
       )}
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <HStack gap={2} vAlign="center" wrap="wrap">
             <Heading level={3}>Termômetro dos temas estratégicos</Heading>
@@ -195,7 +195,7 @@ export default function Painel({ ir }: { ir: (r: RotaId) => void }) {
         </VStack>
       </Card>
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <HStack gap={2} vAlign="center" wrap="wrap">
             <Heading level={3}>Alertas críticos</Heading>

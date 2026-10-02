@@ -88,7 +88,7 @@ export default function Preparo1a1() {
           </Text>
         </HStack>
 
-        <Card padding={3}>
+        <Card padding={4}>
           <VStack gap={1.5}>
             <HStack gap={2} vAlign="center" wrap="wrap">
               <Heading level={1}>{p.nome}</Heading>

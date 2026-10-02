@@ -175,7 +175,7 @@ export default function Calibragem() {
       )}
 
       {!modoMesa && (
-        <Card padding={3}>
+        <Card padding={4}>
           <VStack gap={2}>
             <Text type="label">Depois da mesa</Text>
             <Text type="supporting">
@@ -206,7 +206,7 @@ function CardMesa({ d }: { d: Defesa }) {
   const a = AVD.find((x) => x.slug === d.slug)!;
   const p = porSlug(d.slug);
   return (
-    <Card padding={3}>
+    <Card padding={4}>
       <VStack gap={2}>
         <HStack gap={2} vAlign="center" wrap="wrap">
           <Text type="large" weight="bold">{p.nome}</Text>

@@ -36,7 +36,7 @@ export function AbaPauta({ SLUG, duracao, setDuracao, descartados, onDescartar }
 
   return (
     <VStack gap={3}>
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <HStack gap={2} vAlign="center" wrap="wrap">
             <Heading level={2}>Pauta sugerida</Heading>

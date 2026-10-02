@@ -260,7 +260,7 @@ function CardSquad({ squad, todasSquads }: { squad: Squad; todasSquads: Squad[] 
   const tl = squad.techLead ? pessoaPor(squad.techLead) : undefined;
 
   return (
-    <Card padding={3}>
+    <Card padding={4}>
       <VStack gap={1.5}>
         <HStack gap={1} vAlign="center" wrap="wrap">
           <Heading level={3}>{squad.nome}</Heading>
@@ -343,7 +343,7 @@ function SecaoLideranca({ coordenador, squads }: { coordenador: string; squads: 
   const comp = composicao(slugs);
 
   return (
-    <Card padding={3}>
+    <Card padding={4}>
       <VStack gap={2}>
         <HStack gap={2} vAlign="center" wrap="wrap">
           <Avatar name={coordenador} size="lg" />
@@ -434,7 +434,7 @@ function Estrutura({ squads, gravar, novoNome, setNovoNome, novaTribo, setNovaTr
 
   return (
     <VStack gap={3}>
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>Criar squad</Heading>
           <HStack gap={2} wrap="wrap" vAlign="end">
@@ -452,7 +452,7 @@ function Estrutura({ squads, gravar, novoNome, setNovoNome, novaTribo, setNovaTr
         </VStack>
       </Card>
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>Squads</Heading>
           <Text type="supporting">
@@ -495,7 +495,7 @@ function Estrutura({ squads, gravar, novoNome, setNovoNome, novaTribo, setNovaTr
         </VStack>
       </Card>
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>Alocação das pessoas</Heading>
           <Text type="supporting">

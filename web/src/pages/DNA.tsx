@@ -74,7 +74,7 @@ export default function DNA() {
 
       {aba === 'time' && (
         <VStack gap={3}>
-          <Card padding={3}>
+          <Card padding={4}>
             <VStack gap={2}>
               <Heading level={3}>Os três eixos no time</Heading>
               <Text type="supporting">
@@ -173,7 +173,7 @@ export default function DNA() {
               return reg && apurarRegistro(reg).codigo === perfil.codigo;
             });
             return (
-              <Card key={perfil.codigo} padding={3}>
+              <Card key={perfil.codigo} padding={4}>
                 <VStack gap={1.5}>
                   <HStack gap={2} vAlign="center" wrap="wrap">
                     <Heading level={3}>{perfil.nome}</Heading>
@@ -263,7 +263,7 @@ function LeituraDoTime({ dist }: { dist: ReturnType<typeof distribuicaoDoTime> }
 
   if (avisos.length === 0) {
     return (
-      <Card padding={3}>
+      <Card padding={4}>
         <Text type="supporting">
           A distribuição ainda não é concentrada o bastante para uma leitura de
           time — ou faltam leituras. Com poucos respondentes, o agregado diz
@@ -274,7 +274,7 @@ function LeituraDoTime({ dist }: { dist: ReturnType<typeof distribuicaoDoTime> }
   }
 
   return (
-    <Card padding={3}>
+    <Card padding={4}>
       <VStack gap={2}>
         <Heading level={3}>O que isso muda na condução do time</Heading>
         <List density="balanced" hasDividers>

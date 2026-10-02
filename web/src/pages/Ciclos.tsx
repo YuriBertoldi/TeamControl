@@ -165,7 +165,7 @@ function Definicao({ ciclo, alterar, restaurar }: {
 }) {
   return (
     <VStack gap={3}>
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>Janela e elegibilidade</Heading>
           <HStack gap={2} wrap="wrap" vAlign="end">
@@ -193,7 +193,7 @@ function Definicao({ ciclo, alterar, restaurar }: {
         </VStack>
       </Card>
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>Escala e faixas</Heading>
           <Banner
@@ -221,7 +221,7 @@ function Definicao({ ciclo, alterar, restaurar }: {
         </VStack>
       </Card>
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>Drivers</Heading>
           <TextArea label="Comportamento (um por linha)" rows={8}
@@ -272,7 +272,7 @@ function Perguntas({ ciclo, alterar }: {
         description="O texto literal importa: é ele que vai no prompt, e é contra ele que a resposta é conferida. Parafrasear aqui produz uma resposta que não cabe no campo lá."
       />
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>Adicionar pergunta</Heading>
           <TextArea label="Texto da pergunta" rows={3} value={texto} onChange={setTexto}
@@ -285,7 +285,7 @@ function Perguntas({ ciclo, alterar }: {
       </Card>
 
       {ciclo.perguntas.length === 0 && (
-        <Card padding={3}>
+        <Card padding={4}>
           <Text type="supporting">
             Nenhuma pergunta cadastrada neste ciclo. Sem elas, a aba de insumo não
             tem o que responder.
@@ -294,7 +294,7 @@ function Perguntas({ ciclo, alterar }: {
       )}
 
       {ciclo.perguntas.map((q, i) => (
-        <Card key={q.id} padding={3}>
+        <Card key={q.id} padding={4}>
           <VStack gap={2}>
             <HStack gap={2} vAlign="center" wrap="wrap" hAlign="between">
               <HStack gap={2} vAlign="center" wrap="wrap">
@@ -391,7 +391,7 @@ function GerarInsumo({ ciclo }: { ciclo: Ciclo }) {
         description="O pacote não propõe nota, quadrante nem Performance — só reúne o que está registrado, com ref_code em cada item, e exige citação. Lance a nota primeiro e use isto para redigir a justificativa."
       />
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <HStack gap={2} wrap="wrap" vAlign="end">
             <Selector label="Liderado" value={slug} hasSearch
@@ -449,7 +449,7 @@ function GerarInsumo({ ciclo }: { ciclo: Ciclo }) {
       )}
 
       {insumo && (
-        <Card padding={3}>
+        <Card padding={4}>
           <VStack gap={2}>
             <HStack gap={2} vAlign="center" wrap="wrap" hAlign="between">
               <HStack gap={2} vAlign="center">

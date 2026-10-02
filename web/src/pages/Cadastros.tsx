@@ -126,7 +126,7 @@ function CadastroPessoas() {
         { valor: conta('desligado'), rotulo: 'desligados' },
       ]} />
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>Adicionar liderado</Heading>
           <HStack gap={2} wrap="wrap" vAlign="end">
@@ -308,7 +308,7 @@ function CadastroTribos() {
 
   return (
     <VStack gap={3}>
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>Adicionar tribo</Heading>
           <HStack gap={2} wrap="wrap" vAlign="end">
@@ -321,7 +321,7 @@ function CadastroTribos() {
       </Card>
 
       {lista.map((t) => (
-        <Card key={t.id} padding={3}>
+        <Card key={t.id} padding={4}>
           <VStack gap={2}>
             <HStack gap={2} vAlign="center" wrap="wrap">
               <Heading level={3}>{t.nome}</Heading>
@@ -377,7 +377,7 @@ function CadastroCargos() {
         description="Dev não é avaliado em Robot Framework; QA não é avaliado em Delphi/VCL. A matriz de skills mostra só o que o cargo da pessoa exige, e o gap é contra o esperado da cadeira."
       />
 
-      <Card padding={3}>
+      <Card padding={4}>
         <VStack gap={2}>
           <Heading level={3}>Adicionar cargo</Heading>
           <HStack gap={2} wrap="wrap" vAlign="end">

@@ -182,7 +182,7 @@ export default function Relatorios() {
       )}
 
       {aba === 'gerar' && (
-        <Card padding={3}>
+        <Card padding={4}>
           <VStack gap={3}>
             <Heading level={3}>Gerar relatório</Heading>
 
