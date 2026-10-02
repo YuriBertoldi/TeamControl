@@ -20,7 +20,7 @@ import {
   PESSOAS, COMPROMISSOS, TEMAS, PAUTA, HOJE, diasEntre, dataBR, nivelDe,
   type Pessoa,
 } from './mock';
-import { NIVEIS, AUTO, SKILLS, AVD, QAS, PDIS, TRILHA } from './mockCiclo';
+import { NIVEIS, AUTO, carregarSkills, AVD, QAS, PDIS, TRILHA } from './mockCiclo';
 import { skillsDoCargo } from './cadastro';
 import type { Ciclo, PerguntaAberta, FonteInsumo } from './ciclos';
 
@@ -141,7 +141,7 @@ export function montarInsumo(
   if (quer('skills')) {
     const esperado = skillsDoCargo(p.cargo, p.techLead);
     const atual = NIVEIS[slug] ?? {};
-    const nome = (cod: string) => SKILLS.find((s) => s.codigo === cod)?.nome ?? cod;
+    const nome = (cod: string) => carregarSkills().find((s) => s.codigo === cod)?.nome ?? cod;
     contagem['Skills da cadeira'] = esperado.length;
     out += linha(`## Skills esperadas da cadeira (${p.cargo})`);
     out += linha('');

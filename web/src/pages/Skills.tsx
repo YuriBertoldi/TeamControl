@@ -22,7 +22,7 @@ import { Table, proportional, pixel } from '@astryxdesign/core/Table';
 
 import { Page, Filtros, Metrica, rotuloCargo } from '../app/ui';
 import { PESSOAS } from '../data/mock';
-import { SKILLS, NIVEIS, AUTO, NIVEL_ROTULO, NIVEL_COR } from '../data/mockCiclo';
+import { carregarSkills, NIVEIS, AUTO, NIVEL_ROTULO, NIVEL_COR } from '../data/mockCiclo';
 import { carregarCargos, skillsDoCargo } from '../data/cadastro';
 
 const ativos = PESSOAS.filter((p) => p.status === 'ativo');
@@ -70,6 +70,9 @@ export default function Skills() {
   const [filtro, setFiltro] = useState('');
   const [cargo, setCargo] = useState('');
 
+  // Lido do cadastro, não da constante: o catálogo é editável, e a matriz
+  // precisa refletir a taxonomia de hoje.
+  const SKILLS = carregarSkills();
   const categorias = [...new Set(SKILLS.map((s) => s.categoria))];
   const cargos = carregarCargos().filter((c) => ativos.some((p) => p.cargo === c.nome));
 

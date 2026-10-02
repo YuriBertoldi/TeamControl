@@ -18,36 +18,12 @@
 export const NIVEL_ROTULO = ['Sem contato', 'Conhece', 'Executa', 'Domínio', 'Referência'] as const;
 export const NIVEL_COR = ['gray', 'red', 'orange', 'blue', 'green'] as const;
 
-export interface Skill {
-  codigo: string;
-  nome: string;
-  categoria: string;
-  estrategica?: boolean;
-  critica?: boolean;
-}
 
-export const SKILLS: Skill[] = [
-  { codigo: 'folha.calculo', nome: 'Cálculo da folha', categoria: 'Produto', critica: true },
-  { codigo: 'fiscal.sped', nome: 'EFD ICMS/IPI', categoria: 'Produto', critica: true },
-  { codigo: 'fiscal.esocial', nome: 'eSocial / NTs', categoria: 'Produto', critica: true },
-  { codigo: 'delphi.vcl', nome: 'Object Pascal / VCL', categoria: 'Delphi' },
-  { codigo: 'delphi.btrieve', nome: 'Estrangulamento Btrieve→PG', categoria: 'Delphi' },
-  { codigo: 'dados.sql', nome: 'SQL PostgreSQL', categoria: 'Dados' },
-  { codigo: 'dados.tuning', nome: 'Tuning e plano de execução', categoria: 'Dados' },
-  { codigo: 'go.idiomatico', nome: 'Go idiomático', categoria: 'Go', estrategica: true },
-  { codigo: 'go.api', nome: 'Go — APIs HTTP', categoria: 'Go', estrategica: true },
-  { codigo: 'plat.docker', nome: 'Docker', categoria: 'Plataforma' },
-  { codigo: 'plat.cicd', nome: 'CI/CD', categoria: 'Plataforma' },
-  { codigo: 'qa.robot', nome: 'Robot Framework', categoria: 'Qualidade' },
-  { codigo: 'qa.python', nome: 'Python para automação', categoria: 'Qualidade' },
-  { codigo: 'qa.cenarios', nome: 'Modelagem de cenários', categoria: 'Qualidade' },
-  { codigo: 'ia.claudecode', nome: 'Claude Code no dia a dia', categoria: 'IA', estrategica: true },
-  { codigo: 'ia.skills', nome: 'Autoria de skills/agents', categoria: 'IA', estrategica: true },
-  { codigo: 'eng.arquitetura', nome: 'Design e arquitetura', categoria: 'Engenharia' },
-  { codigo: 'eng.causaraiz', nome: 'Diagnóstico de causa raiz', categoria: 'Engenharia' },
-  { codigo: 'lid.mentoria', nome: 'Mentoria', categoria: 'Liderança' },
-  { codigo: 'lid.estimativa', nome: 'Estimativa e dimensionamento', categoria: 'Liderança' },
-];
+// O catálogo de skills mora em `data/cadastro.ts` desde que virou cadastro
+// editável. Fica re-exportado aqui para quem só precisa da taxonomia inicial;
+// quem monta tela deve usar `carregarSkills()`, que respeita o que foi salvo.
+export { SKILLS_SEED as SKILLS, carregarSkills } from './cadastro';
+export type { Skill } from './cadastro';
 
 /** nível do líder por pessoa/skill. Ausente = 0. */
 export const NIVEIS: Record<string, Record<string, number>> = {};

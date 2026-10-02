@@ -29,11 +29,12 @@ import { Plus } from 'lucide-react';
 
 import { Page, Metrica } from '../app/ui';
 import { PESSOAS, HOJE, diasEntre, dataBR } from '../data/mock';
-import { PDIS, SKILLS, DNA_AVISO } from '../data/mockCiclo';
+import { PDIS, carregarSkills, DNA_AVISO } from '../data/mockCiclo';
 import { DNA } from '../data/mock';
 
 const ativos = PESSOAS.filter((p) => p.status === 'ativo');
-const skillNome = (cod?: string) => SKILLS.find((s) => s.codigo === cod)?.nome ?? '—';
+const skillNome = (cod?: string) =>
+  carregarSkills().find((s) => s.codigo === cod)?.nome ?? '—';
 
 export default function PDI() {
   const [aba, setAba] = useState('sem');

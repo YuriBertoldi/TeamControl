@@ -40,7 +40,7 @@ import {
 import { carregarConfig } from '../config';
 import { squadsDe } from '../data/squads';
 import { REGISTROS, FEEDBACKS } from '../data/registros';
-import { SKILLS, NIVEIS, AUTO, NIVEL_ROTULO, NIVEL_COR, AVD, QAS, PDIS, TRILHA, media, faixa } from '../data/mockCiclo';
+import { carregarSkills, NIVEIS, AUTO, NIVEL_ROTULO, NIVEL_COR, AVD, QAS, PDIS, TRILHA, media, faixa } from '../data/mockCiclo';
 import { skillsDoCargo } from '../data/cadastro';
 import { carregarCiclos, cicloVigente } from '../data/ciclos';
 import {
@@ -619,7 +619,7 @@ function AbaSkills({ slug }: { slug: string }) {
   const esperado = skillsDoCargo(p.cargo, p.techLead);
   const atual = NIVEIS[slug] ?? {};
   const auto = AUTO[slug] ?? {};
-  const nome = (cod: string) => SKILLS.find((s) => s.codigo === cod)?.nome ?? cod;
+  const nome = (cod: string) => carregarSkills().find((s) => s.codigo === cod)?.nome ?? cod;
 
   const temLeitura = Object.keys(atual).length > 0;
   const extras = Object.keys(atual).filter((c) => !esperado.some((e) => e.codigo === c));

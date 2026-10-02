@@ -31,13 +31,15 @@ import { Plus, RotateCcw, UserPlus } from 'lucide-react';
 import { Page, Filtros, Stats, corDaCadeira, rotuloCargo } from '../app/ui';
 import { ListaDetalhe, Detalhe, Bloco, type LinhaEnxuta } from '../app/ListaDetalhe';
 import { nivelDe, type Pessoa, type Familia } from '../data/mock';
-import { SKILLS, NIVEL_ROTULO } from '../data/mockCiclo';
+import { NIVEL_ROTULO } from '../data/mockCiclo';
 import {
   carregarPessoas, salvarPessoas, restaurarPessoas, pessoaNova,
   carregarTribos, salvarTribos, restaurarTribos,
   carregarCargos, salvarCargos, restaurarCargos, cargoNovo, STATUS_PESSOA, type Cargo,
+  carregarSkills, skillValePara,
 } from '../data/cadastro';
 import type { Tribo } from '../data/squads';
+import CadastroSkills from './cadastro/Skills';
 
 const FAMILIAS: Familia[] = ['Desenvolvimento', 'Testes / QA', 'Produto', 'Liderança'];
 /** Cor da família — a mesma do resto do sistema, para a leitura não trocar de código. */
@@ -64,18 +66,20 @@ export default function Cadastros() {
   return (
     <Page
       titulo="Cadastros"
-      subtitulo="Pessoas, tribos e cargos. Nada é apagado — tudo é mudança de status."
+      subtitulo="Pessoas, tribos, cargos e skills. Nada é apagado — tudo é mudança de status."
       largura={1240}
     >
       <TabList value={aba} onChange={setAba} hasDivider>
         <Tab value="pessoas" label="Pessoas" />
         <Tab value="tribos" label="Tribos" />
         <Tab value="cargos" label="Cargos" />
+        <Tab value="skills" label="Skills" />
       </TabList>
 
       {aba === 'pessoas' && <CadastroPessoas />}
       {aba === 'tribos' && <CadastroTribos />}
       {aba === 'cargos' && <CadastroCargos />}
+      {aba === 'skills' && <CadastroSkills />}
     </Page>
   );
 }
@@ -440,7 +444,18 @@ function EditorCargo({ c, alterar }: {
         : [...c.skills.filter((s) => s.codigo !== codigo), { codigo, nivelEsperado: nivel }],
     });
 
-  const categorias = [...new Set(SKILLS.map((s) => s.categoria))];
+  // Só o que se aplica à família da cadeira. Oferecer Robot Framework para um
+  // cargo de Produto não é só ruído na tela: vira linha na matriz que nunca vai
+  // ser preenchida, e gap falso contamina a leitura de cobertura.
+  //
+  // O que já está vinculado continua aparecendo mesmo se a restrição mudou
+  // depois — senão a skill some da tela e não dá para desvincular.
+  const doCatalogo = carregarSkills();
+  const aplicaveis = doCatalogo.filter((s) => skillValePara(s, c.familia));
+  const herdadas = doCatalogo.filter(
+    (s) => !skillValePara(s, c.familia) && c.skills.some((x) => x.codigo === s.codigo));
+  const lista = [...aplicaveis, ...herdadas];
+  const categorias = [...new Set(lista.map((s) => s.categoria))];
 
   return (
     <Detalhe
@@ -456,7 +471,7 @@ function EditorCargo({ c, alterar }: {
 
         <Divider />
 
-        <Bloco rotulo={`Skills da cadeira (${c.skills.length} de ${SKILLS.length})`}>
+        <Bloco rotulo={`Skills da cadeira (${c.skills.length} de ${lista.length} aplicáveis a ${c.familia})`}>
           <Text type="supporting">
             O nível é o mínimo esperado de quem ocupa a cadeira. Quem fica abaixo
             aparece em Matriz de skills › Cobertura da cadeira.
@@ -467,7 +482,7 @@ function EditorCargo({ c, alterar }: {
           <VStack key={cat} gap={1}>
             <Text type="label">{cat}</Text>
             <List density="compact" hasDividers>
-              {SKILLS.filter((s) => s.categoria === cat).map((s) => {
+              {lista.filter((s) => s.categoria === cat).map((s) => {
                 const n = nivelDaSkill(s.codigo);
                 return (
                   <ListItem

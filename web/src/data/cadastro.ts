@@ -98,6 +98,119 @@ export interface Cargo {
   skills: SkillDoCargo[];
 }
 
+/* ---------- catálogo de skills ---------- */
+
+const CHAVE_SKILLS = 'skills';
+
+/**
+ * Skill do catálogo.
+ *
+ * `familias` é o que torna a skill específica de certas cadeiras: Robot
+ * Framework não faz sentido para Produto, e oferecê-la ao montar o cargo só
+ * produz linha morta na matriz. Vazio ou ausente = vale para todas, que é o
+ * caso do núcleo comum (SQL, causa raiz, Claude Code).
+ *
+ * `estrategica` e `critica` não são enfeite: estratégica entra no termômetro
+ * dos temas que você cobra; crítica alimenta o cálculo de bus factor.
+ */
+export interface Skill {
+  codigo: string;
+  nome: string;
+  categoria: string;
+  familias?: Familia[];
+  estrategica?: boolean;
+  critica?: boolean;
+  descricao?: string;
+}
+
+/**
+ * Taxonomia inicial.
+ *
+ * Vem preenchida porque é conhecimento de domínio, não dado de pessoa: sem ela
+ * a matriz não sabe o que medir. Mas é SEED, não constante — o que você salvar
+ * vence, e a taxonomia muda junto com a tecnologia do time.
+ *
+ * O tamanho é deliberado: ~20 linhas se mantém; 100 ninguém revisa.
+ */
+export const SKILLS_SEED: Skill[] = [
+  { codigo: 'folha.calculo', nome: 'Cálculo da folha', categoria: 'Produto', critica: true },
+  { codigo: 'fiscal.sped', nome: 'EFD ICMS/IPI', categoria: 'Produto', critica: true },
+  { codigo: 'fiscal.esocial', nome: 'eSocial / NTs', categoria: 'Produto', critica: true },
+  { codigo: 'delphi.vcl', nome: 'Object Pascal / VCL', categoria: 'Delphi',
+    familias: ['Desenvolvimento', 'Liderança'] },
+  { codigo: 'delphi.btrieve', nome: 'Estrangulamento Btrieve→PG', categoria: 'Delphi',
+    familias: ['Desenvolvimento', 'Liderança'] },
+  { codigo: 'dados.sql', nome: 'SQL PostgreSQL', categoria: 'Dados' },
+  { codigo: 'dados.tuning', nome: 'Tuning e plano de execução', categoria: 'Dados',
+    familias: ['Desenvolvimento', 'Liderança'] },
+  { codigo: 'go.idiomatico', nome: 'Go idiomático', categoria: 'Go', estrategica: true,
+    familias: ['Desenvolvimento', 'Liderança'] },
+  { codigo: 'go.api', nome: 'Go — APIs HTTP', categoria: 'Go', estrategica: true,
+    familias: ['Desenvolvimento', 'Liderança'] },
+  { codigo: 'plat.docker', nome: 'Docker', categoria: 'Plataforma' },
+  { codigo: 'plat.cicd', nome: 'CI/CD', categoria: 'Plataforma' },
+  { codigo: 'qa.robot', nome: 'Robot Framework', categoria: 'Qualidade',
+    familias: ['Testes / QA'] },
+  { codigo: 'qa.python', nome: 'Python para automação', categoria: 'Qualidade',
+    familias: ['Testes / QA'] },
+  { codigo: 'qa.cenarios', nome: 'Modelagem de cenários', categoria: 'Qualidade',
+    familias: ['Testes / QA', 'Produto'] },
+  { codigo: 'ia.claudecode', nome: 'Claude Code no dia a dia', categoria: 'IA', estrategica: true },
+  { codigo: 'ia.skills', nome: 'Autoria de skills/agents', categoria: 'IA', estrategica: true },
+  { codigo: 'eng.arquitetura', nome: 'Design e arquitetura', categoria: 'Engenharia',
+    familias: ['Desenvolvimento', 'Liderança'] },
+  { codigo: 'eng.causaraiz', nome: 'Diagnóstico de causa raiz', categoria: 'Engenharia' },
+  { codigo: 'lid.mentoria', nome: 'Mentoria', categoria: 'Liderança' },
+  { codigo: 'lid.estimativa', nome: 'Estimativa e dimensionamento', categoria: 'Liderança' },
+];
+
+export function carregarSkills(): Skill[] {
+  return lerJSON<Skill[]>(CHAVE_SKILLS, [...SKILLS_SEED]);
+}
+
+export function salvarSkills(lista: Skill[]): void {
+  escreverJSON(CHAVE_SKILLS, lista);
+}
+
+export function restaurarSkills(): Skill[] {
+  remover(CHAVE_SKILLS);
+  return [...SKILLS_SEED];
+}
+
+/**
+ * Código a partir de categoria e nome: `qualidade.playwright`.
+ *
+ * Gerado, e não digitado, porque o código é a chave que liga skill a cargo, a
+ * avaliação e a PDI — e o erro que mais dói aqui é nascerem dois códigos para
+ * a mesma skill, o que quebra a matriz sem avisar ninguém.
+ */
+export function codigoSkill(categoria: string, nome: string, existentes: string[]): string {
+  const limpa = (t: string) =>
+    t.normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 14);
+  const base = `${limpa(categoria) || 'geral'}.${limpa(nome) || 'skill'}`;
+  if (!existentes.includes(base)) return base;
+  let n = 2;
+  while (existentes.includes(`${base}${n}`)) n++;
+  return `${base}${n}`;
+}
+
+/**
+ * A skill se aplica a esta família de cargo?
+ *
+ * Sem restrição declarada ela vale para todas — é como o núcleo comum deve se
+ * comportar, e evita que criar uma skill nova obrigue a lembrar de marcar as
+ * quatro famílias.
+ */
+export function skillValePara(s: Skill, familia: Familia): boolean {
+  return !s.familias || s.familias.length === 0 || s.familias.includes(familia);
+}
+
+/** Skills oferecíveis para uma cadeira — o que o editor de cargo deve listar. */
+export function skillsDisponiveis(familia: Familia): Skill[] {
+  return carregarSkills().filter((sk) => skillValePara(sk, familia));
+}
+
 const CHAVE_CARGOS = 'cargos';
 
 const s = (codigo: string, nivelEsperado: number): SkillDoCargo => ({ codigo, nivelEsperado });
