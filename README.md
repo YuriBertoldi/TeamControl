@@ -27,17 +27,60 @@ meses".
 cd api
 cp .env.example .env        # edite PASTA_REGISTROS
 
-# Sobe Postgres e API. As migrations rodam sozinhas na subida.
+# Sobe Postgres, API e interface. As migrations rodam sozinhas na subida.
 docker compose up -d --build
+# → http://localhost:5180
 
-# Carga da pasta: confira no seco antes de gravar
+# Carga da pasta, em duas passadas:
+#   -seed      cataloga QUE o arquivo existe (idempotente por sha256)
+#   -processar lê o conteúdo e cria reunião, registro, encaminhamento e AVD
 docker compose exec api /bin/api -seed /data/registros -dry-run
 docker compose exec api /bin/api -seed /data/registros
+docker compose exec api /bin/api -processar /data/registros
+```
 
-# Frontend
-cd ../web
-npm install
-npm run dev     # http://localhost:5180
+### Mexendo na interface
+
+O container serve o bundle já compilado, que não recarrega sozinho. Para
+desenvolver, use o servidor do Vite na mesma porta:
+
+```bash
+docker compose stop web     # os dois disputam a 5180
+cd ../web && npm install && npm run dev
+```
+
+> A URL da API entra no bundle em tempo de **build** — o Vite substitui
+> `import.meta.env` ali. Trocar `VITE_API` exige `docker compose build web`;
+> mexer em variável de ambiente do container não tem efeito.
+
+### Subir junto com a máquina
+
+Os três serviços têm `restart: unless-stopped`, então voltam sozinhos **assim
+que o motor do Docker sobe**. Essa é a metade fácil, e sozinha ela não basta:
+se o Docker Desktop não iniciar com o Windows, não há motor para restaurar
+container nenhum e o sistema simplesmente não está lá.
+
+Por isso são duas peças, e a segunda é a que costuma faltar:
+
+1. `restart: unless-stopped` no `docker-compose.yml` — já versionado.
+2. Um atalho para `Docker Desktop.exe` em `shell:startup` (cole isso no
+   Executar do Windows para abrir a pasta). O `AutoStart` do próprio Docker
+   Desktop serve igual; o atalho só não depende de uma caixinha de
+   configuração que uma atualização pode desmarcar.
+
+`unless-stopped` e não `always` de propósito: parar um container de propósito
+deve mantê-lo parado. `always` o ressuscitaria no próximo boot, ignorando a
+sua decisão.
+
+Para testar sem reiniciar a máquina, **não use `docker kill`** — o Docker
+trata isso como parada explícita e, corretamente, não reinicia nada, o que faz
+o teste passar por falha. O teste válido é derrubar o motor e levantá-lo de
+novo:
+
+```bash
+taskkill //F //IM "Docker Desktop.exe" && wsl --shutdown
+"/c/Program Files/Docker/Docker/Docker Desktop.exe" &
+docker ps    # os três voltam sozinhos em ~10s
 ```
 
 ### Verificação

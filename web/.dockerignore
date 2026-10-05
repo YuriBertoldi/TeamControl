@@ -1,0 +1,7 @@
+# O build acontece dentro da imagem: node_modules do host tem binario compilado
+# para Windows e quebraria o `npm ci` do Alpine.
+node_modules
+dist
+.env
+.env.local
+*.log

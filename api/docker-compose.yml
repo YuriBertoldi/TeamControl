@@ -3,6 +3,10 @@
 services:
   db:
     image: postgres:16-alpine
+    # Volta sozinho quando o Docker Desktop sobe. `unless-stopped` e nao
+    # `always`: se voce parar um container de proposito, ele fica parado --
+    # `always` ressuscitaria no proximo boot e ignoraria a sua decisao.
+    restart: unless-stopped
     environment:
       POSTGRES_USER: teamcontrol
       POSTGRES_PASSWORD: teamcontrol
@@ -19,6 +23,7 @@ services:
 
   api:
     build: .
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgres://teamcontrol:teamcontrol@db:5432/teamcontrol?sslmode=disable
       COORDENADOR_EMAIL: coordenacao@exemplo.com
@@ -33,6 +38,29 @@ services:
     volumes:
       # A pasta de registros entra somente leitura: a ingestão lê, nunca escreve.
       - "${PASTA_REGISTROS:-C:/dados/registros-demo}:/data/registros:ro"
+
+  # O frontend faltava aqui, e por isso "subir o Docker" levantava só metade do
+  # sistema: banco e API respondiam, a interface não existia. Quem subisse o
+  # ambiente só pelo compose abria localhost:5180 e não via nada, sem nenhuma
+  # pista de que faltava um `npm run dev` noutra aba.
+  #
+  # O contexto de build é `../web` porque o compose orquestra o sistema todo,
+  # mesmo morando na pasta da API.
+  web:
+    build:
+      context: ../web
+      args:
+        # Em tempo de build: o Vite substitui `import.meta.env` no bundle, e o
+        # JavaScript roda no navegador do usuário — onde o nome de serviço
+        # "api" da rede do compose não resolve. Tem que ser o host.
+        VITE_API: http://127.0.0.1:8080
+    ports:
+      # Mesma porta do servidor de desenvolvimento, para a URL não mudar
+      # conforme o jeito de subir.
+      - "127.0.0.1:5180:80"
+    depends_on:
+      - api
+    restart: unless-stopped
 
 volumes:
   dados:
