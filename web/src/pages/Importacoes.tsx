@@ -29,8 +29,10 @@ import { Page, Filtros, Metrica } from '../app/ui';
 import { ListaDetalhe, Detalhe, Bloco, type LinhaEnxuta } from '../app/ListaDetalhe';
 import { dataBR } from '../data/mock';
 import { carregarConfig } from '../config';
+import { api } from '../lib/api';
+import { escreverJSON } from '../data/armazenamento';
 import {
-  ARQUIVOS, ACERVO, TIPO_ROTULO, STATUS_ROTULO,
+  ARQUIVOS, TIPO_ROTULO, STATUS_ROTULO,
   type StatusFonte, type TipoFonte, type ArquivoFonte,
 } from '../data/mockOps';
 
@@ -60,11 +62,63 @@ export default function Importacoes() {
   const [arquivos, setArquivos] = useState<File[]>([]);
   const [colado, setColado] = useState('');
 
-  const porStatus = (s: StatusFonte) => ARQUIVOS.filter((a) => a.status === s).length;
-  const precisamDeVoce = ARQUIVOS.filter(
+  // A fila vira estado local, e não leitura direta do cache: "Ignorar" precisa
+  // sumir o arquivo da lista na hora. Sem isto a ação iria ao banco e a tela
+  // continuaria mostrando o mesmo, dando a impressão de botão quebrado.
+  const [lista, setLista] = useState<ArquivoFonte[]>(ARQUIVOS);
+  const [ocupado, setOcupado] = useState(false);
+  const [aviso, setAviso] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
+
+  /** Recarrega do banco e atualiza o cache, para a próxima subida já vir certa. */
+  const recarregar = async () => {
+    const nova = await api.importacoes();
+    if (nova) {
+      setLista(nova as unknown as ArquivoFonte[]);
+      escreverJSON('importacoes', nova);
+    }
+  };
+
+  const mudarStatus = async (a: ArquivoFonte, novo: 'ignorado' | 'pendente') => {
+    setOcupado(true);
+    setAviso(null);
+    try {
+      await api.marcarArquivo(a.id, novo);
+      await recarregar();
+      setAviso({ tipo: 'success', texto: novo === 'ignorado'
+        ? `"${a.arquivo}" saiu da fila. Dá para voltar atrás no filtro de ignorados.`
+        : `"${a.arquivo}" voltou para a fila.` });
+    } catch (e) {
+      // O erro chega à tela em vez de sumir no console: sem isto o botão
+      // pareceria não fazer nada, que é exatamente o sintoma relatado.
+      setAviso({ tipo: 'error', texto: `Não consegui alterar: ${(e as Error).message}` });
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  const varrer = async () => {
+    setOcupado(true);
+    setAviso(null);
+    try {
+      const r = await api.varrer();
+      await recarregar();
+      const pendencias = (r.revisao?.length ?? 0) + (r.erros?.length ?? 0);
+      setAviso({ tipo: 'success', texto:
+        `${r.vistos} arquivos varridos · ${r.reunioes} reuniões · ${r.registros} registros` +
+        (pendencias ? ` · ${pendencias} precisam de você` : '') });
+    } catch (e) {
+      setAviso({ tipo: 'error', texto: `A varredura falhou: ${(e as Error).message}` });
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  const porStatus = (s: StatusFonte) => lista.filter((a) => a.status === s).length;
+  const porTipo = (t: TipoFonte) => lista.filter((a) => a.tipo === t).length;
+  const precisamDeVoce = lista.filter(
     (a) => a.status === 'revisao_manual' || a.status === 'erro');
 
-  const base = aba === 'revisao' ? precisamDeVoce : ARQUIVOS;
+  const base = aba === 'revisao' ? precisamDeVoce : lista;
 
   const linhas: Linha[] = useMemo(() => base
     .filter((a) => {
@@ -91,23 +145,33 @@ export default function Importacoes() {
   return (
     <Page
       titulo="Importações"
-      subtitulo={`${principal?.caminho ?? "pasta não configurada"} · varredura a cada ${cfg.intervaloVarreduraSeg}s · ${ACERVO.totalArquivos} arquivos`}
-      acoes={<Button icon={<RefreshCw size={14} />} label="Varrer agora" />}
+      subtitulo={`${principal?.caminho ?? "pasta não configurada"} · ${lista.length} arquivos`}
+      acoes={<Button icon={<RefreshCw size={14} />} label="Varrer agora"
+                     onClick={() => { void varrer(); }} isDisabled={ocupado} />}
       largura={1240}
     >
+      {aviso && (
+        <Banner status={aviso.tipo === 'error' ? 'error' : 'success'}
+                title={aviso.tipo === 'error' ? 'Não deu certo' : 'Pronto'}
+                description={aviso.texto} />
+      )}
+
+      {/* Contagens derivadas de `lista`, e não do ACERVO calculado na subida:
+          depois de ignorar um arquivo ou varrer, os números precisam acompanhar
+          a tela. Senão o painel contradiz a lista logo abaixo dele. */}
       <HStack gap={2} wrap="wrap">
-        <Metrica valor={ACERVO.registrosProcessados} rotulo="Registros processados"
-                 nota={`de ${ACERVO.tactiq + ACERVO.geminiNotas} transcrições`} cor="green" />
-        <Metrica valor={porStatus('pendente')} rotulo="Na fila"
-                 nota="jun/jul nunca processados" cor="orange" />
+        <Metrica valor={porStatus('processado')} rotulo="Processados"
+                 nota={`de ${lista.length} arquivos`} cor="green" />
+        <Metrica valor={porStatus('pendente')} rotulo="Na fila" cor="orange" />
         <Metrica valor={precisamDeVoce.length} rotulo="Precisam de você" cor="red" />
-        <Metrica valor={ACERVO.tactiq} rotulo="Tactiq .txt" />
-        <Metrica valor={ACERVO.geminiNotas + ACERVO.geminiTranscricao} rotulo="PDFs do Gemini"
-                 nota="substituíram o Tactiq em set/26" />
+        <Metrica valor={porStatus('ignorado')} rotulo="Ignorados" />
+        <Metrica valor={porTipo('tactiq_txt')} rotulo="Tactiq .txt" />
+        <Metrica valor={porTipo('gemini_notes_pdf') + porTipo('gemini_transcript_pdf')}
+                 rotulo="PDFs do Gemini" />
       </HStack>
 
       <TabList value={aba} onChange={setAba} hasDivider>
-        <Tab value="fila" label={`Fila (${ARQUIVOS.length})`} />
+        <Tab value="fila" label={`Fila (${lista.length})`} />
         <Tab value="revisao" label={`Precisam de você (${precisamDeVoce.length})`} />
         <Tab value="entrada" label="Nova entrada" />
       </TabList>
@@ -207,10 +271,30 @@ export default function Importacoes() {
 
                       <Divider />
                       <HStack gap={1} wrap="wrap">
-                        <Button icon={<Check size={14} />} size="sm" variant="primary" label="Confirmar e processar"
-                                isDisabled={a.status === 'processado'} />
-                        <Button icon={<EyeOff size={14} />} size="sm" variant="ghost" label="Ignorar" />
+                        {/* "Processar" devolve o arquivo para a fila e roda a
+                            varredura. A passada é idempotente, então repetir é
+                            seguro — e é o que permite oferecer isto como botão. */}
+                        <Button icon={<Check size={14} />} size="sm" variant="primary"
+                                label={a.status === 'processado' ? 'Reprocessar' : 'Confirmar e processar'}
+                                isDisabled={ocupado}
+                                onClick={() => { void (async () => {
+                                  await mudarStatus(a, 'pendente');
+                                  await varrer();
+                                })(); }} />
+                        {a.status === 'ignorado' ? (
+                          <Button icon={<Check size={14} />} size="sm" variant="ghost"
+                                  label="Voltar para a fila" isDisabled={ocupado}
+                                  onClick={() => { void mudarStatus(a, 'pendente'); }} />
+                        ) : (
+                          <Button icon={<EyeOff size={14} />} size="sm" variant="ghost"
+                                  label="Ignorar" isDisabled={ocupado}
+                                  onClick={() => { void mudarStatus(a, 'ignorado'); }} />
+                        )}
                       </HStack>
+                      <Text type="supporting">
+                        Ignorar não apaga nada: o arquivo sai da fila e continua
+                        na pasta. Dá para trazer de volta filtrando por ignorados.
+                      </Text>
                     </VStack>
                   </Detalhe>
                 );

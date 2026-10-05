@@ -97,6 +97,32 @@ export const api = {
    */
   registro: (id: number) => tentar<DetalheRegistroAPI>(`/api/registros/${id}`, 8000),
 
+  /* ---------- importações ---------- */
+
+  /**
+   * Ignora um arquivo da fila, ou devolve para ela.
+   *
+   * Só estes dois destinos existem de propósito. Marcar como `processado` pela
+   * tela faria o banco dizer que a conversa está no sistema sem que ninguém a
+   * tenha lido — e isso só apareceria na calibragem, quando não há como voltar.
+   */
+  marcarArquivo: (id: number, status: 'ignorado' | 'pendente') =>
+    requisitar<{ ok: boolean }>(`/api/importacoes/${id}`, {
+      method: 'PUT', body: JSON.stringify({ status }),
+    }),
+
+  /**
+   * Varre a pasta e processa o que achar.
+   *
+   * Timeout largo: a passada completa lê 121 arquivos, extrai 15 PDFs e grava
+   * 3 mil linhas de transcrição. Os 2s do padrão abortariam no meio e a tela
+   * diria que falhou enquanto o banco seguia gravando.
+   */
+  varrer: () =>
+    requisitar<{ ok: boolean; vistos: number; reunioes: number; registros: number;
+                 revisao: string[] | null; erros: string[] | null }>(
+      '/api/importacoes/varrer', { method: 'POST' }, 120000),
+
   /* ---------- escrita ---------- */
 
   salvarPessoas: (lista: Pessoa[]) =>

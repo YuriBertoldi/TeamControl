@@ -14,6 +14,7 @@ import (
 	"os"
 	"time"
 
+	"teamcontrol/internal/ingest"
 	"teamcontrol/internal/models"
 )
 
@@ -163,6 +164,63 @@ func Rotas(db *sql.DB, tenantID, userID int64) http.Handler {
 		escreverJSON(w, arquivos)
 	})
 
+	// Ignorar / devolver para a fila. Era botão sem ação nenhuma na tela.
+	mux.HandleFunc("PUT /api/importacoes/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, err := idDaURL(r.URL.Path)
+		if err != nil {
+			erroJSON(w, http.StatusBadRequest, "id inválido")
+			return
+		}
+		var corpo struct {
+			Status string `json:"status"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&corpo); err != nil {
+			erroJSON(w, http.StatusBadRequest, "corpo inválido: "+err.Error())
+			return
+		}
+		err = marcarStatusArquivo(r.Context(), db, tenantID, id, corpo.Status)
+		if errors.Is(err, sql.ErrNoRows) {
+			erroJSON(w, http.StatusNotFound, "arquivo não encontrado")
+			return
+		}
+		if err != nil {
+			log.Printf("marcar arquivo %d: %v", id, err)
+			erroJSON(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		escreverJSON(w, map[string]any{"ok": true})
+	})
+
+	// Varredura sob demanda: cataloga e processa, na mesma ordem do CLI.
+	//
+	// As duas passadas são idempotentes, então repetir é barato e seguro — é
+	// justamente o que permite expor isto como botão em vez de tarefa de
+	// terminal.
+	mux.HandleFunc("POST /api/importacoes/varrer", func(w http.ResponseWriter, r *http.Request) {
+		raiz := primeiroNaoVazio(os.Getenv("PASTA_REGISTROS"), "/data/registros")
+		rel, err := ingest.Seed(db, tenantID, raiz, false)
+		if err != nil {
+			log.Printf("varrer: %v", err)
+			erroJSON(w, http.StatusInternalServerError, "falha ao varrer a pasta: "+err.Error())
+			return
+		}
+		proc, err := ingest.Processar(db, tenantID, raiz,
+			primeiroNaoVazio(os.Getenv("COORDENADOR_NOME"), "Coordenação"))
+		if err != nil {
+			log.Printf("processar: %v", err)
+			erroJSON(w, http.StatusInternalServerError, "falha ao processar: "+err.Error())
+			return
+		}
+		escreverJSON(w, map[string]any{
+			"ok":        true,
+			"vistos":    rel.Vistos,
+			"reunioes":  proc.Reunioes,
+			"registros": proc.Registros,
+			"revisao":   proc.Revisao,
+			"erros":     proc.Erros,
+		})
+	})
+
 	return comCORS(comLog(mux))
 }
 
@@ -179,7 +237,7 @@ func comCORS(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if origem := r.Header.Get("Origin"); permitidas[origem] {
 			w.Header().Set("Access-Control-Allow-Origin", origem)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		}
 		if r.Method == http.MethodOptions {

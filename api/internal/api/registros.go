@@ -411,3 +411,35 @@ func pastaRelativa(caminho string) string {
 	}
 	return strings.Join(dirs, "/")
 }
+
+// marcarStatusArquivo muda o status de um arquivo da fila de importação.
+//
+// Só dois destinos são aceitos, e a restrição é o ponto:
+//
+//   - `ignorado`  — "não é material de 1:1, pare de me mostrar". É o que
+//     resolve material de apoio, modelo em branco e arquivo solto na pasta.
+//   - `pendente`  — desfaz o ignorar e devolve o arquivo para a fila.
+//
+// Deixar a tela escolher qualquer status permitiria marcar como `processado`
+// um arquivo que nunca foi lido — o banco ficaria dizendo que a conversa está
+// no sistema quando não está, e isso só apareceria na hora da calibragem.
+func marcarStatusArquivo(ctx context.Context, db *sql.DB, tenantID, id int64, status string) error {
+	if status != "ignorado" && status != "pendente" {
+		return fmt.Errorf("status %q não pode ser definido pela tela", status)
+	}
+	res, err := db.ExecContext(ctx, `
+		UPDATE source_files
+		   SET status = $3,
+		       -- Ao devolver para a fila, limpa o motivo antigo: ele descrevia
+		       -- por que parou da última vez e confundiria na releitura.
+		       motivo_revisao = CASE WHEN $3 = 'pendente' THEN NULL ELSE motivo_revisao END,
+		       erro = CASE WHEN $3 = 'pendente' THEN NULL ELSE erro END
+		 WHERE tenant_id = $1 AND id = $2`, tenantID, id, status)
+	if err != nil {
+		return fmt.Errorf("marcar arquivo %d: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}

@@ -73,16 +73,20 @@ func (r RelProcessamento) Resumo() string {
 func Processar(db *sql.DB, tenantID int64, raiz, coordenador string) (RelProcessamento, error) {
 	var rel RelProcessamento
 
-	if err := processarRegistros(db, tenantID, raiz, &rel); err != nil {
+	// Quem o coordenador tirou da fila nao e relido. Carregado uma vez por
+	// passada: a resposta e a mesma para os 121 arquivos.
+	fora := carregarIgnorados(db, tenantID)
+
+	if err := processarRegistros(db, tenantID, raiz, fora, &rel); err != nil {
 		return rel, err
 	}
-	if err := processarTranscricoes(db, tenantID, raiz, coordenador, &rel); err != nil {
+	if err := processarTranscricoes(db, tenantID, raiz, coordenador, fora, &rel); err != nil {
 		return rel, err
 	}
-	if err := processarPDFs(db, tenantID, raiz, coordenador, &rel); err != nil {
+	if err := processarPDFs(db, tenantID, raiz, coordenador, fora, &rel); err != nil {
 		return rel, err
 	}
-	if err := processarAVD(db, tenantID, raiz, &rel); err != nil {
+	if err := processarAVD(db, tenantID, raiz, fora, &rel); err != nil {
 		return rel, err
 	}
 	return rel, nil
@@ -100,7 +104,7 @@ func Processar(db *sql.DB, tenantID int64, raiz, coordenador string) (RelProcess
 // toda semana. As etapas ficam no texto da fonte, pesquisáveis; promovê-las a
 // compromisso é decisão da curadoria do pós-1:1, não da carga.
 func processarPDFs(db *sql.DB, tenantID int64, raiz, coordenador string,
-	rel *RelProcessamento) error {
+	fora map[string]bool, rel *RelProcessamento) error {
 
 	var arquivos []string
 	_ = filepath.Walk(raiz, func(p string, info os.FileInfo, err error) error {
@@ -124,6 +128,10 @@ func processarPDFs(db *sql.DB, tenantID int64, raiz, coordenador string,
 
 	for _, caminho := range arquivos {
 		nome := filepath.Base(caminho)
+
+		if fora[nome] { // ver carregarIgnorados: pular, não só preservar o status
+			continue
+		}
 
 		notas := strings.Contains(nome, "Anotações do Gemini")
 		transcricao := strings.Contains(nome, "Transcript")
@@ -286,7 +294,7 @@ func gravarPDFTranscricao(db *sql.DB, tenantID int64, arquivo, texto, extrator,
 // mexer na antiga, senão toda citação antiga passa a apontar para o lugar
 // errado.
 func processarTranscricoes(db *sql.DB, tenantID int64, raiz, coordenador string,
-	rel *RelProcessamento) error {
+	fora map[string]bool, rel *RelProcessamento) error {
 
 	var arquivos []string
 	_ = filepath.Walk(raiz, func(p string, info os.FileInfo, err error) error {
@@ -300,6 +308,10 @@ func processarTranscricoes(db *sql.DB, tenantID int64, raiz, coordenador string,
 
 	for _, caminho := range arquivos {
 		nome := filepath.Base(caminho)
+
+		if fora[nome] { // ver carregarIgnorados: pular, não só preservar o status
+			continue
+		}
 
 		f, err := os.Open(caminho)
 		if err != nil {
@@ -428,12 +440,17 @@ func gravarTranscricaoFonte(db *sql.DB, tenantID, personID int64, arquivo string
 
 /* ---------- registros de 1:1 ---------- */
 
-func processarRegistros(db *sql.DB, tenantID int64, raiz string, rel *RelProcessamento) error {
+func processarRegistros(db *sql.DB, tenantID int64, raiz string,
+	fora map[string]bool, rel *RelProcessamento) error {
 	arquivos, _ := filepath.Glob(filepath.Join(raiz, "registros-1-1", "*.md"))
 	sort.Strings(arquivos)
 
 	for _, caminho := range arquivos {
 		nome := filepath.Base(caminho)
+
+		if fora[nome] { // ver carregarIgnorados: pular, não só preservar o status
+			continue
+		}
 
 		f, err := os.Open(caminho)
 		if err != nil {
@@ -610,7 +627,8 @@ func tipoResponsavel(nome string) string {
 
 /* ---------- AVD ---------- */
 
-func processarAVD(db *sql.DB, tenantID int64, raiz string, rel *RelProcessamento) error {
+func processarAVD(db *sql.DB, tenantID int64, raiz string,
+	fora map[string]bool, rel *RelProcessamento) error {
 	leia, _ := filepath.Glob(filepath.Join(raiz, "AVD-*", "Rascunhos", "00-LEIA-ME.md"))
 	if len(leia) == 0 {
 		return nil // sem ciclo descrito, não há o que montar
@@ -628,6 +646,12 @@ func processarAVD(db *sql.DB, tenantID int64, raiz string, rel *RelProcessamento
 	// O período vem do cabeçalho das defesas, lido antes de gravar o ciclo:
 	// é ele que define o corte de elegibilidade, e um ciclo gravado com
 	// período errado classifica gente como inelegível sem motivo.
+	//
+	// Esta leitura não consulta `fora` de propósito, e é a única assim. O
+	// arquivo de defesas já nasce `ignorado` no catálogo — ele não é uma 1:1,
+	// não vira reunião nem registro. O que se tira dele aqui são duas datas de
+	// cabeçalho; honrar o `ignorado` faria o ciclo inteiro falhar por falta de
+	// período, que é o oposto do que "tirar da fila de importação" quer dizer.
 	inicio, fim := "", ""
 	if defs, _ := filepath.Glob(filepath.Join(raiz, "AVD-*", "Defesas-Calibragem.md")); len(defs) > 0 {
 		if fd, err := os.Open(defs[0]); err == nil {
@@ -656,6 +680,10 @@ func processarAVD(db *sql.DB, tenantID int64, raiz string, rel *RelProcessamento
 
 	for _, caminho := range rascunhos {
 		nome := filepath.Base(caminho)
+
+		if fora[nome] { // ver carregarIgnorados: pular, não só preservar o status
+			continue
+		}
 		if nome == "00-LEIA-ME.md" {
 			continue
 		}
@@ -882,10 +910,19 @@ func gravarDefesa(db *sql.DB, cycleID, personID int64, d Defesa) error {
 
 /* ---------- utilidades ---------- */
 
+// marcarArquivo registra o desfecho do processamento de um arquivo.
+//
+// NÃO toca em quem está `ignorado`. "Ignorar" é decisão humana — "isto não é
+// material de 1:1" — e a varredura roda toda vez que alguém aperta o botão ou
+// sobe o ambiente. Sem a trava, cada passada devolveria para a fila tudo o que
+// você tirou dela, e o trabalho de triagem nunca terminaria.
+//
+// Para desfazer existe caminho explícito: "Voltar para a fila" na tela, que
+// passa por `marcarStatusArquivo` e devolve o arquivo para `pendente`.
 func marcarArquivo(db *sql.DB, tenantID int64, nomeArquivo, status, erro string) {
 	_, _ = db.Exec(`
 		UPDATE source_files SET status = $3, erro = NULLIF($4,''), processado_em = now()
-		 WHERE tenant_id = $1 AND nome_arquivo = $2`,
+		 WHERE tenant_id = $1 AND nome_arquivo = $2 AND status <> 'ignorado'`,
 		tenantID, nomeArquivo, status, erro)
 }
 
@@ -915,4 +952,31 @@ func nuloImpl(s string) any {
 		return nil
 	}
 	return s
+}
+
+// carregarIgnorados lê quem o coordenador tirou da fila.
+//
+// Carregado uma vez por passada e consultado em memória: são 121 arquivos e
+// uma consulta por arquivo seria 121 idas ao banco para responder sempre a
+// mesma pergunta.
+//
+// Pular de fato, e não só preservar o status, importa: um arquivo ignorado que
+// resolvesse pessoa e data criaria reunião e fonte no banco mesmo marcado como
+// fora da fila — a tela diria "ignorado" e o dossiê teria o conteúdo.
+func carregarIgnorados(db *sql.DB, tenantID int64) map[string]bool {
+	fora := map[string]bool{}
+	linhas, err := db.Query(`
+		SELECT nome_arquivo FROM source_files
+		 WHERE tenant_id = $1 AND status = 'ignorado'`, tenantID)
+	if err != nil {
+		return fora
+	}
+	defer linhas.Close()
+	for linhas.Next() {
+		var nome string
+		if linhas.Scan(&nome) == nil {
+			fora[nome] = true
+		}
+	}
+	return fora
 }
