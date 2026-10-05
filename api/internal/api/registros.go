@@ -26,6 +26,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 // ParteFront é uma das versões escritas da conversa.
@@ -499,6 +501,41 @@ func atualizarCompromisso(ctx context.Context, db *sql.DB, tenantID, id int64,
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+// concluirEmLote fecha vários compromissos de uma vez.
+//
+// Uma transação só, e não N requisições: fechar os 16 combinados do Rafael
+// depois da 1:1 em dezesseis idas ao banco falharia na nona sem ninguém saber,
+// e o board ficaria mostrando sete abertos que a conversa resolveu. Aqui ou
+// fecha tudo, ou não fecha nada e o erro chega à tela.
+//
+// `concluido_em` é gravado porque "concluído quando?" é pergunta da
+// retrospectiva de ciclo, e sem a data a resposta é "em algum momento".
+//
+// Reabrir usa o mesmo caminho com `status='aberto'`: a ação é reversível de
+// propósito — um lote fechado por engano não pode exigir ir ao banco à mão.
+func concluirEmLote(ctx context.Context, db *sql.DB, tenantID int64,
+	ids []int64, status string) (int, error) {
+
+	if len(ids) == 0 {
+		return 0, fmt.Errorf("nenhum compromisso selecionado")
+	}
+	if status != "concluido" && status != "aberto" {
+		return 0, fmt.Errorf("em lote só dá para concluir ou reabrir, não %q", status)
+	}
+
+	res, err := db.ExecContext(ctx, `
+		UPDATE action_items
+		   SET status = $3,
+		       concluido_em = CASE WHEN $3 = 'concluido' THEN CURRENT_DATE ELSE NULL END
+		 WHERE tenant_id = $1 AND id = ANY($2)`,
+		tenantID, pq.Array(ids), status)
+	if err != nil {
+		return 0, fmt.Errorf("concluir em lote: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
 }
 
 // atribuirPessoa registra de quem é o arquivo quando a carga não soube dizer.

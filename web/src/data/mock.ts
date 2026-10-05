@@ -114,6 +114,8 @@ export interface Compromisso {
   prazoTexto: string;
   prazoDate: string | null;
   status: 'aberto' | 'em_andamento' | 'concluido';
+  /** Responde "concluído quando?" na retrospectiva de ciclo. */
+  concluidoEm?: string | null;
   origemMeeting: string;
   herdado: number;
   prazoVago?: boolean;

@@ -103,6 +103,7 @@ function aplicar(slug: string, p: PreparoAPI): void {
     natureza: c.natureza,
     venceAgora: c.venceAgora,
     status: c.status as Compromisso['status'],
+    concluidoEm: c.concluidoEm,
     origemMeeting: c.origemMeeting,
     herdado: c.herdado,
     prazoVago: c.prazoVago,

@@ -170,6 +170,28 @@ func Rotas(db *sql.DB, tenantID, userID int64) http.Handler {
 		escreverJSON(w, lista)
 	})
 
+	// Concluir (ou reabrir) um lote.
+	//
+	// Rota própria e não um laço na tela: fechar dezesseis combinados em
+	// dezesseis requisições falharia na nona sem ninguém saber, e o board
+	// ficaria mostrando sete abertos que a conversa já resolveu.
+	mux.HandleFunc("POST /api/compromissos/lote", func(w http.ResponseWriter, r *http.Request) {
+		var corpo struct {
+			IDs    []int64 `json:"ids"`
+			Status string  `json:"status"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&corpo); err != nil {
+			erroJSON(w, http.StatusBadRequest, "corpo inválido: "+err.Error())
+			return
+		}
+		n, err := concluirEmLote(r.Context(), db, tenantID, corpo.IDs, corpo.Status)
+		if err != nil {
+			erroJSON(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		escreverJSON(w, map[string]any{"ok": true, "alterados": n})
+	})
+
 	// Confirmar prazo e mudar situação. A data que o sistema sugeriu só vira a
 	// data que vale passando por aqui — ver internal/ingest/prazo.go.
 	mux.HandleFunc("PUT /api/compromissos/{id}", func(w http.ResponseWriter, r *http.Request) {

@@ -158,6 +158,18 @@ export const api = {
     }),
 
   /**
+   * Conclui (ou reabre) um lote de compromissos.
+   *
+   * Uma requisição e não um laço: fechar os dezesseis combinados de alguém
+   * depois da 1:1 em dezesseis idas falharia na nona sem ninguém saber, e o
+   * board ficaria mostrando sete abertos que a conversa já resolveu.
+   */
+  concluirLote: (ids: number[], status: 'concluido' | 'aberto') =>
+    requisitar<{ ok: boolean; alterados: number }>('/api/compromissos/lote', {
+      method: 'POST', body: JSON.stringify({ ids, status }),
+    }, 30000),
+
+  /**
    * A preparação de uma 1:1, montada do histórico.
    *
    * Sob demanda e não na subida: o pacote lê o texto de todas as conversas da
@@ -334,6 +346,8 @@ export interface CompromissoAPI {
   prazoSugerido?: string | null;
   natureza: 'prazo' | 'continuo' | 'indefinido';
   status: string;
+  /** Responde "concluído quando?" na retrospectiva de ciclo. */
+  concluidoEm?: string | null;
   origemMeeting: string;
   /** Em quantas conversas distintas a mesma descrição aparece. */
   herdado: number;

@@ -61,6 +61,9 @@ type Compromisso struct {
 	PrazoSugerido *string `json:"prazoSugerido,omitempty"`
 	Natureza      string  `json:"natureza"`
 	Status        string  `json:"status"`
+	// ConcluidoEm responde "concluído quando?", que é pergunta da
+	// retrospectiva de ciclo. Sem a data, a resposta é "em algum momento".
+	ConcluidoEm   *string `json:"concluidoEm"`
 	OrigemMeeting string  `json:"origemMeeting"`
 	Herdado       int     `json:"herdado"`
 	PrazoVago     bool    `json:"prazoVago"`
@@ -267,7 +270,7 @@ func CompromissosDe(db *sql.DB, tenantID, personID int64) ([]Compromisso, error)
 		SELECT a.id, p.nome_completo, p.slug, a.responsavel_tipo,
 		       COALESCE(a.responsavel_nome,''), a.descricao,
 		       COALESCE(a.prazo_texto,''), a.prazo_date::text, a.prazo_sugerido::text,
-		       a.natureza, a.status, m.data::text, COALESCE(r.n, 1),
+		       a.natureza, a.status, a.concluido_em::text, m.data::text, COALESCE(r.n, 1),
 		       a.prazo_vago, COALESCE(a.nota_herdado,''),
 		       -- Vence NESTA conversa: o prazo é "a próxima 1:1" e essa
 		       -- próxima ainda não existe no banco, logo é a que vem.
@@ -293,7 +296,7 @@ func CompromissosDe(db *sql.DB, tenantID, personID int64) ([]Compromisso, error)
 		var origem sql.NullString
 		if err := linhas.Scan(&c.ID, &c.Pessoa, &c.PessoaSlug, &c.Responsavel,
 			&c.NomeResp, &c.Descricao, &c.PrazoTexto, &c.PrazoDate, &c.PrazoSugerido,
-			&c.Natureza, &c.Status, &origem, &c.Herdado, &c.PrazoVago,
+			&c.Natureza, &c.Status, &c.ConcluidoEm, &origem, &c.Herdado, &c.PrazoVago,
 			&c.NotaHerdado, &c.VenceAgora); err != nil {
 			return nil, err
 		}

@@ -19,7 +19,7 @@ import { TextInput } from '@astryxdesign/core/TextInput';
 import { Banner } from '@astryxdesign/core/Banner';
 import { TabList, Tab } from '@astryxdesign/core/TabList';
 import { Divider } from '@astryxdesign/core/Divider';
-import { CalendarClock } from 'lucide-react';
+import { CalendarClock, CheckCheck } from 'lucide-react';
 
 import { Page, Filtros, Metrica } from '../app/ui';
 import { api } from '../lib/api';
@@ -38,6 +38,11 @@ export default function Compromissos() {
   const [versao, setVersao] = useState(0);
   const [novaData, setNovaData] = useState<Record<number, string>>({});
   const [aviso, setAviso] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
+  const [confirmando, setConfirmando] = useState(false);
+  // Guardado para o desfazer. O lote é reversível de propósito: um engano
+  // aqui fecha dezenas de combinados, e exigir ir ao banco à mão seria
+  // transformar um clique errado em trabalho de madrugada.
+  const [ultimoLote, setUltimoLote] = useState<number[]>([]);
 
   const atraso = (c: Compromisso) => (c.prazoDate ? diasEntre(c.prazoDate, HOJE) : null);
   const feito = (c: Compromisso) => c.status === 'concluido';
@@ -101,6 +106,10 @@ export default function Compromissos() {
       };
     }), [visao, pessoa, busca, versao]);
 
+  // Quantos do lote são meus. Entra na confirmação porque é onde o engano
+  // custa mais: compromisso do liderado fechado à toa ele lembra de cobrar.
+  const meusAqui = linhas.filter((l) => l.c.responsavel === 'coordenador').length;
+
   /**
    * Grava no banco e só então mexe na tela.
    *
@@ -128,6 +137,60 @@ export default function Compromissos() {
       setAviso({ tipo: 'success', texto: feitoTexto });
     } catch (e) {
       setAviso({ tipo: 'error', texto: `Não consegui gravar: ${(e as Error).message}` });
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  /**
+   * Conclui tudo o que o filtro atual mostra.
+   *
+   * "Todos" é o que está na tela, não o banco inteiro. É o que a pessoa vê
+   * quando clica, e é o que o caso de uso pede: sair da 1:1 do Rafael, filtrar
+   * por ele, e fechar os dezesseis de uma vez.
+   *
+   * Pede confirmação em dois passos, e a confirmação diz o NÚMERO e o RECORTE.
+   * Um botão "concluir todos" sem isso, num board que abre na aba Vencidos,
+   * fecharia dezessete compromissos de nove pessoas diferentes num clique —
+   * e cada um deles é uma coisa que alguém combinou em voz alta.
+   */
+  const concluirLote = async () => {
+    const ids = linhas.map((l) => l.c.id);
+    setOcupado(true);
+    setAviso(null);
+    try {
+      const r = await api.concluirLote(ids, 'concluido');
+      const agora = new Date().toISOString().slice(0, 10);
+      linhas.forEach((l) => { l.c.status = 'concluido'; l.c.concluidoEm = agora; });
+      setUltimoLote(ids);
+      invalidarPreparo();
+      setVersao((v) => v + 1);
+      setConfirmando(false);
+      setAviso({ tipo: 'success',
+        texto: `${r.alterados} compromissos concluídos. Dá para desfazer logo abaixo.` });
+    } catch (e) {
+      setAviso({ tipo: 'error', texto: `Não consegui concluir: ${(e as Error).message}` });
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  /** Desfaz o último lote. Reabrir é o mesmo caminho, com o status invertido. */
+  const desfazerLote = async () => {
+    if (ultimoLote.length === 0) return;
+    setOcupado(true);
+    try {
+      const r = await api.concluirLote(ultimoLote, 'aberto');
+      const ids = new Set(ultimoLote);
+      COMPROMISSOS.forEach((c) => {
+        if (ids.has(c.id)) { c.status = 'aberto'; c.concluidoEm = undefined; }
+      });
+      setUltimoLote([]);
+      invalidarPreparo();
+      setVersao((v) => v + 1);
+      setAviso({ tipo: 'success', texto: `${r.alterados} compromissos reabertos.` });
+    } catch (e) {
+      setAviso({ tipo: 'error', texto: `Não consegui reabrir: ${(e as Error).message}` });
     } finally {
       setOcupado(false);
     }
@@ -189,9 +252,46 @@ export default function Compromissos() {
                     .map((p) => ({ value: p.slug, label: p.curto }))} />
         {(busca || pessoa) && (
           <Button size="sm" variant="ghost" label="Limpar"
-                  onClick={() => { setBusca(''); setPessoa(''); }} />
+                  onClick={() => { setBusca(''); setPessoa(''); setConfirmando(false); }} />
+        )}
+        {/* Só aparece onde faz sentido: na aba de concluídos ele reabriria
+            tudo, que é o contrário do que o rótulo promete. */}
+        {visao !== 'concluidos' && linhas.length > 0 && (
+          <Button size="sm" variant="ghost" icon={<CheckCheck size={14} />}
+                  label={`Concluir ${linhas.length}`} isDisabled={ocupado}
+                  onClick={() => setConfirmando(true)} />
         )}
       </Filtros>
+
+      {/* A confirmação diz o NÚMERO e o RECORTE. "Concluir todos" num board
+          aberto na aba Vencidos fecharia dezessete compromissos de nove
+          pessoas num clique — e cada um é algo que alguém combinou em voz
+          alta. Dizer quantos e de quem é o que torna a decisão possível. */}
+      {confirmando && (
+        <Banner
+          status="warning"
+          title={`Concluir ${linhas.length} compromisso(s)?`}
+          description={descreverRecorte(visao,
+                        PESSOAS.find((p) => p.slug === pessoa)?.curto ?? pessoa,
+                        busca, linhas.length, meusAqui)}
+          endContent={
+            <HStack gap={1} wrap="wrap">
+              <Button size="sm" variant="primary" label="Concluir" isDisabled={ocupado}
+                      onClick={() => { void concluirLote(); }} />
+              <Button size="sm" variant="ghost" label="Cancelar"
+                      onClick={() => setConfirmando(false)} />
+            </HStack>
+          } />
+      )}
+
+      {ultimoLote.length > 0 && !confirmando && (
+        <Banner
+          status="info"
+          title={`${ultimoLote.length} concluído(s) agora há pouco`}
+          description="Se fechou algo que ainda não acabou, dá para reabrir o lote inteiro."
+          endContent={<Button size="sm" variant="ghost" label="Desfazer" isDisabled={ocupado}
+                              onClick={() => { void desfazerLote(); }} />} />
+      )}
 
       <Card padding={0}>
         <ListaDetalhe
@@ -280,4 +380,28 @@ export default function Compromissos() {
       </Card>
     </Page>
   );
+}
+
+/**
+ * Descreve, em português, o que o lote vai atingir.
+ *
+ * Existe porque "Concluir 17" não diz quais dezessete. A frase nomeia o
+ * recorte — aba, pessoa, busca — e destaca quantos são SEUS, que é a parte em
+ * que o engano custa mais caro: um compromisso do liderado fechado por engano
+ * ele lembra de cobrar; um seu, ninguém cobra.
+ */
+function descreverRecorte(visao: string, pessoa: string, busca: string,
+                          n: number, meus: number): string {
+  const aba: Record<string, string> = {
+    vencidos: 'vencidos', meus: 'seus', semdata: 'sem data', todos: 'em aberto',
+  };
+  const partes = [`${n} ${aba[visao] ?? ''}`.trim()];
+  if (pessoa) partes.push(`de ${pessoa}`);
+  if (busca) partes.push(`com "${busca}" na descrição`);
+
+  const base = `Vai concluir ${partes.join(' ')} — exatamente o que está na lista abaixo.`;
+  const aviso = meus > 0 && visao !== 'meus'
+    ? ` ${meus} deles são seus.`
+    : '';
+  return base + aviso + ' Dá para desfazer depois.';
 }
