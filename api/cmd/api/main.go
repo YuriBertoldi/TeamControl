@@ -25,11 +25,11 @@ import (
 
 func main() {
 	var (
-		soMigrar  = flag.Bool("migrate", false, "aplica as migrations e sai")
-		seedDir   = flag.String("seed", "", "pasta de registros para a carga inicial")
-		procDir   = flag.String("processar", "", "pasta de registros para processar o conteúdo")
-		dryRun    = flag.Bool("dry-run", false, "com -seed, não grava nada")
-		porta     = flag.String("porta", env("PORTA", "8080"), "porta HTTP")
+		soMigrar = flag.Bool("migrate", false, "aplica as migrations e sai")
+		seedDir  = flag.String("seed", "", "pasta de registros para a carga inicial")
+		procDir  = flag.String("processar", "", "pasta de registros para processar o conteúdo")
+		dryRun   = flag.Bool("dry-run", false, "com -seed, não grava nada")
+		porta    = flag.String("porta", env("PORTA", "8080"), "porta HTTP")
 	)
 	flag.Parse()
 
