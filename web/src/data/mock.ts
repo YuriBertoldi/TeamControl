@@ -12,7 +12,23 @@
 
 import { carregarPessoas, carregarTribos } from './cadastro';
 
-export const HOJE = '2026-10-01';
+/**
+ * A data de hoje, em ISO local.
+ *
+ * Era uma constante fixa, de quando a tela ainda era protótipo. Com dado real
+ * isso vira defeito que piora sozinho: "última 1:1 há 9 dias" quando são 13, e
+ * a diferença cresce um dia por dia. Pior, é silencioso — o número continua
+ * parecendo certo, e quem decide a quem ligar primeiro decide pelo número.
+ *
+ * Montada a partir dos componentes LOCAIS, não de `toISOString()`: este é um
+ * sistema de 1:1 operado no Brasil (UTC-3), e o ISO em UTC vira o dia seguinte
+ * às 21h — a cadência de todo mundo pularia um dia ao fim da tarde.
+ */
+export const HOJE = (() => {
+  const d = new Date();
+  const dois = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}`;
+})();
 
 export type Confidencialidade = 1 | 2 | 3 | 4;
 export type Prioridade = 'alta' | 'media' | 'baixa' | 'escuta';
