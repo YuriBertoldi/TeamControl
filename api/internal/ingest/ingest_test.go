@@ -51,6 +51,46 @@ func TestParseTactiqParticipanteEhAMelhorFonteDoNome(t *testing.T) {
 	}
 }
 
+// Cabeçalho com o coordenador listado PRIMEIRO. O Tactiq ordena a lista pela
+// entrada na chamada, então quem abriu a sala aparece na frente — o que, numa
+// 1:1, costuma ser o coordenador.
+const transcricaoCoordenadorPrimeiro = `# PARTICIPANTE EXEMPLO <> COORDENACAO EXEMPLO - Reunião 1-1
+  Meeting started: 16/07/2026, 14:27:30
+  Duration: 4 minutes
+  Participants: Coordenação Exemplo, Participante Exemplo
+  ## Transcript
+  00:00 Coordenação Exemplo: Bom dia.
+  00:04 Participante Exemplo: Bom dia.
+`
+
+func TestParseTactiqGuardaTodosOsParticipantes(t *testing.T) {
+	// Sem o nome do coordenador não há com quem comparar, e `Participante`
+	// acaba sendo o primeiro da lista — que aqui é o coordenador. A lista
+	// completa é o que permite a quem chama tentar o segundo nome e acertar,
+	// em vez de mandar a conversa para revisão manual.
+	tr, err := ParseTactiq(strings.NewReader(transcricaoCoordenadorPrimeiro), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tr.Participantes) != 2 {
+		t.Fatalf("participantes %v, esperados os dois do cabeçalho", tr.Participantes)
+	}
+	if tr.Participantes[0] != "Coordenação Exemplo" || tr.Participantes[1] != "Participante Exemplo" {
+		t.Errorf("participantes %v, esperada a ordem do cabeçalho", tr.Participantes)
+	}
+}
+
+func TestParseTactiqComCoordenadorConfiguradoPulaEle(t *testing.T) {
+	// Com o nome configurado, acerta de primeira mesmo listado na frente.
+	tr, err := ParseTactiq(strings.NewReader(transcricaoCoordenadorPrimeiro), "Coordenação Exemplo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Participante != "Participante Exemplo" {
+		t.Errorf("liderado %q, esperado o participante que não é o coordenador", tr.Participante)
+	}
+}
+
 func TestParseTactiqTextoCanonicoEhEstavel(t *testing.T) {
 	// Os offsets das evidências apontam para este texto. Se o formato mudar,
 	// toda evidência já gravada passa a apontar para o lugar errado — por isso

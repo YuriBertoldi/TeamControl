@@ -207,3 +207,56 @@ func TestLeiaMeEDefesasReaisParseiam(t *testing.T) {
 	}
 	t.Logf("%d defesas parseadas · %d sem tese", len(ds), semTese)
 }
+
+func TestDossiesReaisParseiam(t *testing.T) {
+	raiz := pasta(t)
+	arquivos, _ := filepath.Glob(filepath.Join(raiz, "AVD-*", "Dossies*", "*.md"))
+	if len(arquivos) == 0 {
+		t.Skip("sem dossiês na pasta")
+	}
+
+	var dossies, reunioes, feedbacks, comAdmissao, semPerformance int
+	for _, caminho := range arquivos {
+		if filepath.Base(caminho) == "00-INDICE.md" {
+			continue
+		}
+		f, err := os.Open(caminho)
+		if err != nil {
+			t.Fatalf("%s: %v", filepath.Base(caminho), err)
+		}
+		d, err := ingest.ParseDossie(f)
+		f.Close()
+		if err != nil {
+			t.Fatalf("%s: %v", filepath.Base(caminho), err)
+		}
+		dossies++
+		reunioes += len(d.Reunioes)
+		feedbacks += len(d.Feedbacks)
+		if d.Admissao != "" {
+			comAdmissao++
+		}
+		for _, r := range d.Reunioes {
+			// Performance vazia significa rótulo que o mapa não conhece. Uma
+			// avaliação sem performance é uma linha a menos na calibragem, e
+			// some sem erro nenhum — exatamente o que estes testes existem
+			// para pegar.
+			if r.Performance == "" {
+				semPerformance++
+			}
+			if r.Avaliacao == "" {
+				t.Errorf("%s: reunião %s sem avaliação do líder",
+					filepath.Base(caminho), r.Data)
+			}
+		}
+	}
+
+	if semPerformance > 0 {
+		t.Errorf("%d reuniões com performance não reconhecida", semPerformance)
+	}
+	if reunioes == 0 || feedbacks == 0 {
+		t.Errorf("%d dossiês renderam %d reuniões e %d feedbacks — esperado mais que zero",
+			dossies, reunioes, feedbacks)
+	}
+	t.Logf("%d dossiês · %d reuniões · %d feedbacks · %d com data de admissão",
+		dossies, reunioes, feedbacks, comAdmissao)
+}

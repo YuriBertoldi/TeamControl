@@ -21,6 +21,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -43,6 +44,8 @@ type RelProcessamento struct {
 	Etapas          int
 	Linhas          int
 	Aliases         int
+	Feedbacks       int
+	Admissoes       int
 	Revisao         []string
 	Erros           []string
 }
@@ -73,22 +76,35 @@ func (r RelProcessamento) Resumo() string {
 func Processar(db *sql.DB, tenantID int64, raiz, coordenador string) (RelProcessamento, error) {
 	var rel RelProcessamento
 
-	// Quem o coordenador tirou da fila nao e relido. Carregado uma vez por
-	// passada: a resposta e a mesma para os 121 arquivos.
-	fora := carregarIgnorados(db, tenantID)
+	// O que o coordenador já decidiu sobre cada arquivo. Carregado uma vez por
+	// passada: a resposta é a mesma para os 121 arquivos, e uma consulta por
+	// arquivo seriam 121 idas ao banco para a mesma pergunta.
+	dec := carregarDecisoes(db, tenantID)
 
-	if err := processarRegistros(db, tenantID, raiz, fora, &rel); err != nil {
+	if err := processarRegistros(db, tenantID, raiz, dec, &rel); err != nil {
 		return rel, err
 	}
-	if err := processarTranscricoes(db, tenantID, raiz, coordenador, fora, &rel); err != nil {
+	if err := processarTranscricoes(db, tenantID, raiz, coordenador, dec, &rel); err != nil {
 		return rel, err
 	}
-	if err := processarPDFs(db, tenantID, raiz, coordenador, fora, &rel); err != nil {
+	if err := processarPDFs(db, tenantID, raiz, coordenador, dec, &rel); err != nil {
 		return rel, err
 	}
-	if err := processarAVD(db, tenantID, raiz, fora, &rel); err != nil {
+	// Depois dos registros, de propósito: o registro local é quem escreve a
+	// avaliação da 1:1, e o dossiê só preenche o que ficou vazio.
+	if err := processarDossies(db, tenantID, raiz, dec, &rel); err != nil {
+		return rel, fmt.Errorf("dossiês: %w", err)
+	}
+	if err := processarFeedbacksAvulsos(db, tenantID, raiz, dec, &rel); err != nil {
+		return rel, fmt.Errorf("feedbacks avulsos: %w", err)
+	}
+	if err := processarAVD(db, tenantID, raiz, dec, &rel); err != nil {
 		return rel, err
 	}
+
+	// Por último: quem sobrou na fila sem nenhum processador o ter tocado
+	// ganha o motivo escrito, para a tela parar de dizer só "na fila".
+	explicarNaoProcessados(db, tenantID)
 	return rel, nil
 }
 
@@ -104,7 +120,7 @@ func Processar(db *sql.DB, tenantID int64, raiz, coordenador string) (RelProcess
 // toda semana. As etapas ficam no texto da fonte, pesquisáveis; promovê-las a
 // compromisso é decisão da curadoria do pós-1:1, não da carga.
 func processarPDFs(db *sql.DB, tenantID int64, raiz, coordenador string,
-	fora map[string]bool, rel *RelProcessamento) error {
+	dec decisoes, rel *RelProcessamento) error {
 
 	var arquivos []string
 	_ = filepath.Walk(raiz, func(p string, info os.FileInfo, err error) error {
@@ -129,7 +145,7 @@ func processarPDFs(db *sql.DB, tenantID int64, raiz, coordenador string,
 	for _, caminho := range arquivos {
 		nome := filepath.Base(caminho)
 
-		if fora[nome] { // ver carregarIgnorados: pular, não só preservar o status
+		if dec.fora[nome] { // ver carregarIgnorados: pular, não só preservar o status
 			continue
 		}
 
@@ -152,37 +168,58 @@ func processarPDFs(db *sql.DB, tenantID int64, raiz, coordenador string,
 			continue
 		}
 
+		var pessoaID int64
 		if transcricao {
-			err = gravarPDFTranscricao(db, tenantID, nome, texto, extrator,
-				qualidade, coordenador, rel)
+			pessoaID, err = gravarPDFTranscricao(db, tenantID, nome, texto, extrator,
+				qualidade, coordenador, dec, rel)
 		} else {
-			err = gravarPDFNotas(db, tenantID, nome, texto, extrator, qualidade, rel)
+			pessoaID, err = gravarPDFNotas(db, tenantID, nome, texto, extrator,
+				qualidade, dec, rel)
 		}
 		if err != nil {
 			rel.Revisao = append(rel.Revisao, fmt.Sprintf("%s: %v", nome, err))
-			marcarArquivo(db, tenantID, nome, "revisao_manual", err.Error())
+			var np naoResolvi
+			if errors.As(err, &np) {
+				marcarRevisaoPessoa(db, tenantID, nome, np.candidatos)
+			} else {
+				marcarArquivo(db, tenantID, nome, "revisao_manual", err.Error())
+			}
 			continue
 		}
-		marcarArquivo(db, tenantID, nome, "processado", "")
+		marcarArquivo(db, tenantID, nome, "processado", "", pessoaID)
 	}
 	return nil
 }
 
+// naoResolvi carrega os nomes que a carga tentou, para a tela poder oferecer a
+// escolha da pessoa em vez de só relatar que não deu.
+//
+// É erro tipado, e não string, porque quem chama precisa distinguir "não sei
+// de quem é" — que uma pessoa resolve num clique — de "o arquivo está
+// quebrado", que ninguém resolve escolhendo nome.
+type naoResolvi struct{ candidatos []string }
+
+func (e naoResolvi) Error() string {
+	return "não identifiquei de quem é: " + strings.Join(e.candidatos, " · ")
+}
+
 func gravarPDFNotas(db *sql.DB, tenantID int64, arquivo, texto, extrator,
-	qualidade string, rel *RelProcessamento) error {
+	qualidade string, dec decisoes, rel *RelProcessamento) (int64, error) {
 
 	n, err := ParseGeminiNotas(texto)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	m, err := ResolverPessoa(db, tenantID, n.Participante)
-	if err != nil {
-		return err
+	m := dec.pessoaDe(arquivo)
+	if m == nil {
+		if m, err = ResolverPessoa(db, tenantID, n.Participante); err != nil {
+			return 0, err
+		}
 	}
 	if m == nil {
-		return fmt.Errorf("não resolvi %q", n.Participante)
+		return 0, naoResolvi{candidatos: []string{n.Participante}}
 	}
-	if m.Como != "exata" {
+	if m.Como != "exata" && m.Como != "manual" {
 		if err := GravarAlias(db, tenantID, m.PersonID, n.Participante, "arquivo"); err == nil {
 			rel.Aliases++
 		}
@@ -194,7 +231,7 @@ func gravarPDFNotas(db *sql.DB, tenantID int64, arquivo, texto, extrator,
 	// com nome errado entrava com a data errada e ninguém via.
 	data := n.DataConteudo
 	if data == "" {
-		return fmt.Errorf("sem data no corpo das anotações")
+		return 0, fmt.Errorf("sem data no corpo das anotações")
 	}
 	// A comparação é contra a data DIGITADA no começo do nome, não contra o
 	// carimbo do Gemini. O carimbo é gerado pela ferramenta e bate sempre com
@@ -204,7 +241,7 @@ func gravarPDFNotas(db *sql.DB, tenantID int64, arquivo, texto, extrator,
 
 	tx, err := db.Begin()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -223,7 +260,7 @@ func gravarPDFNotas(db *sql.DB, tenantID int64, arquivo, texto, extrator,
 		RETURNING id`,
 		tenantID, m.PersonID, data, dataArquivo, divergente).Scan(&meetingID)
 	if err != nil {
-		return fmt.Errorf("reunião: %w", err)
+		return 0, fmt.Errorf("reunião: %w", err)
 	}
 
 	soma := sha256.Sum256([]byte(texto))
@@ -240,7 +277,7 @@ func gravarPDFNotas(db *sql.DB, tenantID int64, arquivo, texto, extrator,
 		  qualidade_extracao = EXCLUDED.qualidade_extracao`,
 		tenantID, meetingID, texto, hex.EncodeToString(soma[:]), extrator, qualidade)
 	if err != nil {
-		return fmt.Errorf("fonte: %w", err)
+		return 0, fmt.Errorf("fonte: %w", err)
 	}
 
 	rel.Notas++
@@ -249,36 +286,39 @@ func gravarPDFNotas(db *sql.DB, tenantID int64, arquivo, texto, extrator,
 		rel.Revisao = append(rel.Revisao, fmt.Sprintf(
 			"%s: data do nome (%s) difere da do conteúdo (%s)", arquivo, dataArquivo, data))
 	}
-	return tx.Commit()
+	return m.PersonID, tx.Commit()
 }
 
 func gravarPDFTranscricao(db *sql.DB, tenantID int64, arquivo, texto, extrator,
-	qualidade, coordenador string, rel *RelProcessamento) error {
+	qualidade, coordenador string, dec decisoes, rel *RelProcessamento) (int64, error) {
 
 	t, err := ParseGeminiTranscricao(texto, coordenador)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	// O PDF de transcrição não imprime a data no corpo; o carimbo do nome é
 	// gerado pela ferramenta e, nesse formato, é confiável.
 	t.Data = DataDoNome(arquivo)
 	if t.Data == "" {
-		return fmt.Errorf("sem data no nome do arquivo")
+		return 0, fmt.Errorf("sem data no nome do arquivo")
 	}
 
-	m, err := ResolverPessoa(db, tenantID, t.Participante)
-	if err != nil {
-		return err
+	m, nome := dec.pessoaDe(arquivo), ""
+	if m == nil {
+		if m, nome, err = resolverEntreParticipantes(db, tenantID,
+			t.Participante, t.Participantes); err != nil {
+			return 0, err
+		}
 	}
 	if m == nil {
-		return fmt.Errorf("não resolvi %q", t.Participante)
+		return 0, naoResolvi{candidatos: t.Participantes}
 	}
-	if m.Como != "exata" {
-		if err := GravarAlias(db, tenantID, m.PersonID, t.Participante, "transcricao"); err == nil {
+	if m.Como != "exata" && m.Como != "manual" {
+		if err := GravarAlias(db, tenantID, m.PersonID, nome, "transcricao"); err == nil {
 			rel.Aliases++
 		}
 	}
-	return gravarTranscricaoFonte(db, tenantID, m.PersonID, arquivo, t,
+	return m.PersonID, gravarTranscricaoFonte(db, tenantID, m.PersonID, arquivo, t,
 		"gemini_transcript", extrator, qualidade, rel)
 }
 
@@ -294,7 +334,7 @@ func gravarPDFTranscricao(db *sql.DB, tenantID int64, arquivo, texto, extrator,
 // mexer na antiga, senão toda citação antiga passa a apontar para o lugar
 // errado.
 func processarTranscricoes(db *sql.DB, tenantID int64, raiz, coordenador string,
-	fora map[string]bool, rel *RelProcessamento) error {
+	dec decisoes, rel *RelProcessamento) error {
 
 	var arquivos []string
 	_ = filepath.Walk(raiz, func(p string, info os.FileInfo, err error) error {
@@ -309,7 +349,7 @@ func processarTranscricoes(db *sql.DB, tenantID int64, raiz, coordenador string,
 	for _, caminho := range arquivos {
 		nome := filepath.Base(caminho)
 
-		if fora[nome] { // ver carregarIgnorados: pular, não só preservar o status
+		if dec.fora[nome] { // ver carregarIgnorados: pular, não só preservar o status
 			continue
 		}
 
@@ -328,18 +368,21 @@ func processarTranscricoes(db *sql.DB, tenantID int64, raiz, coordenador string,
 			continue
 		}
 
-		m, err := ResolverPessoa(db, tenantID, t.Participante)
-		if err != nil {
-			return err
+		m, quem := dec.pessoaDe(nome), ""
+		if m == nil {
+			m, quem, err = resolverEntreParticipantes(db, tenantID, t.Participante, t.Participantes)
+			if err != nil {
+				return err
+			}
 		}
 		if m == nil {
 			rel.Revisao = append(rel.Revisao,
 				fmt.Sprintf("%s: não resolvi %q", nome, t.Participante))
-			marcarArquivo(db, tenantID, nome, "revisao_manual", "pessoa não resolvida")
+			marcarRevisaoPessoa(db, tenantID, nome, t.Participantes)
 			continue
 		}
-		if m.Como != "exata" {
-			if err := GravarAlias(db, tenantID, m.PersonID, t.Participante, "transcricao"); err == nil {
+		if m.Como != "exata" && m.Como != "manual" {
+			if err := GravarAlias(db, tenantID, m.PersonID, quem, "transcricao"); err == nil {
 				rel.Aliases++
 			}
 		}
@@ -350,7 +393,7 @@ func processarTranscricoes(db *sql.DB, tenantID int64, raiz, coordenador string,
 			marcarArquivo(db, tenantID, nome, "erro", err.Error())
 			continue
 		}
-		marcarArquivo(db, tenantID, nome, "processado", "")
+		marcarArquivo(db, tenantID, nome, "processado", "", m.PersonID)
 	}
 	return nil
 }
@@ -441,14 +484,14 @@ func gravarTranscricaoFonte(db *sql.DB, tenantID, personID int64, arquivo string
 /* ---------- registros de 1:1 ---------- */
 
 func processarRegistros(db *sql.DB, tenantID int64, raiz string,
-	fora map[string]bool, rel *RelProcessamento) error {
+	dec decisoes, rel *RelProcessamento) error {
 	arquivos, _ := filepath.Glob(filepath.Join(raiz, "registros-1-1", "*.md"))
 	sort.Strings(arquivos)
 
 	for _, caminho := range arquivos {
 		nome := filepath.Base(caminho)
 
-		if fora[nome] { // ver carregarIgnorados: pular, não só preservar o status
+		if dec.fora[nome] { // ver carregarIgnorados: pular, não só preservar o status
 			continue
 		}
 
@@ -486,7 +529,7 @@ func processarRegistros(db *sql.DB, tenantID int64, raiz string,
 			marcarArquivo(db, tenantID, nome, "erro", err.Error())
 			continue
 		}
-		marcarArquivo(db, tenantID, nome, "processado", "")
+		marcarArquivo(db, tenantID, nome, "processado", "", m.PersonID)
 	}
 	return nil
 }
@@ -628,7 +671,7 @@ func tipoResponsavel(nome string) string {
 /* ---------- AVD ---------- */
 
 func processarAVD(db *sql.DB, tenantID int64, raiz string,
-	fora map[string]bool, rel *RelProcessamento) error {
+	dec decisoes, rel *RelProcessamento) error {
 	leia, _ := filepath.Glob(filepath.Join(raiz, "AVD-*", "Rascunhos", "00-LEIA-ME.md"))
 	if len(leia) == 0 {
 		return nil // sem ciclo descrito, não há o que montar
@@ -681,7 +724,7 @@ func processarAVD(db *sql.DB, tenantID int64, raiz string,
 	for _, caminho := range rascunhos {
 		nome := filepath.Base(caminho)
 
-		if fora[nome] { // ver carregarIgnorados: pular, não só preservar o status
+		if dec.fora[nome] { // ver carregarIgnorados: pular, não só preservar o status
 			continue
 		}
 		if nome == "00-LEIA-ME.md" {
@@ -719,7 +762,7 @@ func processarAVD(db *sql.DB, tenantID int64, raiz string,
 			rel.Erros = append(rel.Erros, fmt.Sprintf("%s: %v", nome, err))
 			continue
 		}
-		marcarArquivo(db, tenantID, nome, "processado", "")
+		marcarArquivo(db, tenantID, nome, "processado", "", m.PersonID)
 	}
 
 	// Defesas por último: dependem da avaliação já existir.
@@ -919,11 +962,26 @@ func gravarDefesa(db *sql.DB, cycleID, personID int64, d Defesa) error {
 //
 // Para desfazer existe caminho explícito: "Voltar para a fila" na tela, que
 // passa por `marcarStatusArquivo` e devolve o arquivo para `pendente`.
-func marcarArquivo(db *sql.DB, tenantID int64, nomeArquivo, status, erro string) {
+// O parâmetro `pessoa` é variádico porque nem todo ponto de marcação sabe de
+// quem é o arquivo — quando a carga falha antes de resolver a pessoa, não há o
+// que gravar, e um zero obrigatório seria uma mentira com cara de dado.
+func marcarArquivo(db *sql.DB, tenantID int64, nomeArquivo, status, erro string,
+	pessoa ...int64) {
+
+	var id any
+	if len(pessoa) > 0 && pessoa[0] > 0 {
+		id = pessoa[0]
+	}
 	_, _ = db.Exec(`
-		UPDATE source_files SET status = $3, erro = NULLIF($4,''), processado_em = now()
+		UPDATE source_files
+		   SET status = $3, erro = NULLIF($4,''), processado_em = now(),
+		       -- A descoberta da carga não sobrescreve a decisão humana: quem
+		       -- abriu o arquivo e escolheu a pessoa tem a palavra final, e a
+		       -- passada seguinte não pode desfazer isso em silêncio.
+		       person_id = CASE WHEN pessoa_manual THEN person_id
+		                        ELSE COALESCE($5::bigint, person_id) END
 		 WHERE tenant_id = $1 AND nome_arquivo = $2 AND status <> 'ignorado'`,
-		tenantID, nomeArquivo, status, erro)
+		tenantID, nomeArquivo, status, erro, id)
 }
 
 // nulo troca string vazia por NULL — coluna opcional vazia é ruído, e `”`
@@ -954,11 +1012,440 @@ func nuloImpl(s string) any {
 	return s
 }
 
-// carregarIgnorados lê quem o coordenador tirou da fila.
+// marcarRevisaoPessoa manda o arquivo para revisão dizendo o que fazer.
+//
+// Não basta dizer "pessoa não resolvida": quem lê a tela fica sabendo que algo
+// falhou e não o que fazer a respeito. Os nomes que a carga tentou vão junto,
+// porque é olhando para eles que dá para reconhecer o apelido, o nome
+// abreviado ou a grafia errada — e `motivo_revisao` guarda a lista para a tela
+// poder oferecer a escolha da pessoa em vez de só relatar o problema.
+func marcarRevisaoPessoa(db *sql.DB, tenantID int64, arquivo string, candidatos []string) {
+	var limpos []string
+	for _, c := range candidatos {
+		if c = strings.TrimSpace(c); c != "" {
+			limpos = append(limpos, c)
+		}
+	}
+	marcarArquivo(db, tenantID, arquivo, "revisao_manual",
+		"não identifiquei de quem é: "+strings.Join(limpos, " · ")+
+			" — escolha a pessoa ao lado")
+	_, _ = db.Exec(`
+		UPDATE source_files SET motivo_revisao = $3
+		 WHERE tenant_id = $1 AND nome_arquivo = $2 AND status <> 'ignorado'`,
+		tenantID, arquivo, strings.Join(limpos, "\n"))
+}
+
+// explicarNaoProcessados dá motivo a quem sobrou na fila.
+//
+// Um arquivo que nenhum processador reivindica fica `pendente` para sempre,
+// sem erro e sem conteúdo no banco. Quem olha a tela vê "na fila" e conclui
+// que o sistema processa depois — e nunca processa. Silêncio aqui é pior que
+// falha: falha a pessoa vê.
+//
+// O status continua `pendente` de propósito. O arquivo está mesmo na fila; o
+// que faltava era a tela conseguir dizer POR QUE ele não andou, e é isso que
+// a coluna `erro` passa a responder.
+func explicarNaoProcessados(db *sql.DB, tenantID int64) {
+	_, _ = db.Exec(`
+		UPDATE source_files SET erro = CASE tipo_detectado
+		    WHEN 'desconhecido' THEN
+		      'formato não reconhecido — nenhum parser sabe ler este arquivo'
+		    WHEN 'material_avd_pdf' THEN
+		      'material de apoio da AVD: não é 1:1 de ninguém, não vira registro'
+		    ELSE
+		      'nenhum processador lê ' || tipo_detectado || ' ainda'
+		  END
+		 WHERE tenant_id = $1 AND status = 'pendente' AND erro IS NULL`, tenantID)
+}
+
+/* ---------- dossiês e feedbacks avulsos ---------- */
+
+// processarDossies lê os dossiês de AVD.
+//
+// Eles são o retrato da TeamGuide: as avaliações mensais com a performance que
+// foi lançada lá, os feedbacks que a pessoa recebeu — inclusive de quem não é
+// o coordenador — e, em alguns casos, a data de admissão. São a única fonte
+// das 1:1s anteriores aos registros locais e dos feedbacks de terceiros.
+//
+// Ficavam catalogados e nunca lidos. A tela dizia "na fila" e ali seguiam,
+// sem erro e sem conteúdo no banco.
+func processarDossies(db *sql.DB, tenantID int64, raiz string,
+	dec decisoes, rel *RelProcessamento) error {
+
+	arquivos, _ := filepath.Glob(filepath.Join(raiz, "AVD-*", "Dossies*", "*.md"))
+	sort.Strings(arquivos)
+
+	for _, caminho := range arquivos {
+		nome := filepath.Base(caminho)
+
+		if dec.fora[nome] { // ver carregarIgnorados: pular, não só preservar o status
+			continue
+		}
+		if nome == "00-INDICE.md" {
+			// Índice da pasta, não dossiê de ninguém. Marcado explicitamente
+			// para não ficar "na fila" para sempre dizendo nada.
+			marcarArquivo(db, tenantID, nome, "ignorado", "índice da pasta, não é dossiê")
+			continue
+		}
+
+		f, err := os.Open(caminho)
+		if err != nil {
+			rel.Erros = append(rel.Erros, fmt.Sprintf("%s: %v", nome, err))
+			continue
+		}
+		d, err := ParseDossie(f)
+		f.Close()
+		if err != nil {
+			rel.Erros = append(rel.Erros, fmt.Sprintf("%s: %v", nome, err))
+			marcarArquivo(db, tenantID, nome, "erro", err.Error())
+			continue
+		}
+
+		m := dec.pessoaDe(nome)
+		if m == nil {
+			if m, err = ResolverPessoa(db, tenantID, d.Nome); err != nil {
+				return err
+			}
+		}
+		if m == nil {
+			rel.Revisao = append(rel.Revisao, fmt.Sprintf("%s: não resolvi %q", nome, d.Nome))
+			marcarRevisaoPessoa(db, tenantID, nome, []string{d.Nome})
+			continue
+		}
+		if m.Como != "exata" && m.Como != "manual" {
+			if err := GravarAlias(db, tenantID, m.PersonID, d.Nome, "dossie"); err == nil {
+				rel.Aliases++
+			}
+		}
+
+		if err := gravarDossie(db, tenantID, m.PersonID, nome, d, rel); err != nil {
+			rel.Erros = append(rel.Erros, fmt.Sprintf("%s: %v", nome, err))
+			marcarArquivo(db, tenantID, nome, "erro", err.Error())
+			continue
+		}
+		marcarArquivo(db, tenantID, nome, "processado", "", m.PersonID)
+	}
+	return nil
+}
+
+func gravarDossie(db *sql.DB, tenantID, personID int64, arquivo string,
+	d *Dossie, rel *RelProcessamento) error {
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // commit explícito no fim
+
+	// A admissão só preenche buraco, nunca sobrescreve: é ela que decide
+	// elegibilidade ao ciclo, e um dossiê do ano passado não pode rebaixar o
+	// que alguém corrigiu no cadastro depois.
+	if d.Admissao != "" {
+		r, err := tx.Exec(`
+			UPDATE people SET data_admissao = $3::date
+			 WHERE tenant_id = $1 AND id = $2 AND data_admissao IS NULL`,
+			tenantID, personID, d.Admissao)
+		if err != nil {
+			return fmt.Errorf("admissão: %w", err)
+		}
+		if n, _ := r.RowsAffected(); n > 0 {
+			rel.Admissoes++
+		}
+	}
+
+	// A TeamGuide tem lançamento duplicado no mesmo dia. As duas linhas caem na
+	// mesma reunião, e só a primeira vira avaliação — o que é o certo, mas
+	// precisa ser dito: uma avaliação descartada em silêncio é uma linha a
+	// menos na calibragem que ninguém procura porque ninguém sabe que sumiu.
+	vistas := map[string]bool{}
+
+	for _, r := range d.Reunioes {
+		if vistas[r.Data] {
+			rel.Revisao = append(rel.Revisao, fmt.Sprintf(
+				"%s: duas avaliações em %s — mantida a primeira", arquivo, r.Data))
+		}
+		vistas[r.Data] = true
+
+		var meetingID int64
+		err := tx.QueryRow(`
+			INSERT INTO meetings (tenant_id, person_id, tipo, data)
+			VALUES ($1,$2,'one_on_one',$3)
+			ON CONFLICT (tenant_id, person_id, data, tipo) DO UPDATE
+			  SET data = EXCLUDED.data
+			RETURNING id`, tenantID, personID, r.Data).Scan(&meetingID)
+		if err != nil {
+			return fmt.Errorf("reunião %s: %w", r.Data, err)
+		}
+		rel.Reunioes++
+
+		if r.Performance == "" {
+			continue
+		}
+		// DO NOTHING, e não DO UPDATE: quando a 1:1 já tem avaliação vinda do
+		// registro local, é ela que vale. O registro é o que EU escrevi sobre
+		// a conversa, com justificativa e impacto; o dossiê é o resumo que a
+		// ferramenta guardou. O dossiê preenche buraco, não corrige ninguém.
+		//
+		// É também o que protege a data repetida: a TeamGuide tem lançamento
+		// duplicado no mesmo dia, as duas linhas caem na mesma reunião, e sem
+		// isto a segunda apagaria a primeira em silêncio.
+		res, err := tx.Exec(`
+			INSERT INTO meeting_evals
+			  (tenant_id, meeting_id, performance, performance_justificativa,
+			   notas_compartilhadas, origem, confidencialidade)
+			VALUES ($1,$2,$3,$4,$5,'teamguide','rh_calibragem')
+			ON CONFLICT (tenant_id, meeting_id) DO NOTHING`,
+			tenantID, meetingID, r.Performance, nulo(r.Avaliacao), nulo(r.Notas))
+		if err != nil {
+			return fmt.Errorf("avaliação %s: %w", r.Data, err)
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			rel.Avaliacoes++
+		}
+	}
+
+	for _, fb := range d.Feedbacks {
+		if err := gravarFeedback(tx, tenantID, personID, fb.Tipo, fb.Data,
+			fb.Autor, "", fb.Texto, "arquivo_md", rel); err != nil {
+			return fmt.Errorf("feedback %s: %w", fb.Data, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// gravarFeedback grava um feedback recebido, venha ele do dossiê ou de arquivo
+// próprio.
+//
+// `autor_externo` sai de quem assina: feedback de par, de gestor de outra área
+// ou de cliente interno é justamente o que não aparece em lugar nenhum hoje, e
+// é o que mais pesa numa calibragem — vale saber que veio de fora.
+//
+// Confidencialidade 1: feedback foi escrito PARA a pessoa, ela já o leu na
+// ferramenta. É o único material do sistema que nasce público ao liderado.
+func gravarFeedback(tx *sql.Tx, tenantID, personID int64, tipo, data, autor,
+	titulo, texto, fonte string, rel *RelProcessamento) error {
+
+	var autorID *int64
+	externo := true
+	if autor != "" {
+		var id int64
+		err := tx.QueryRow(`
+			SELECT id FROM people
+			 WHERE tenant_id = $1 AND nome_normalizado = normaliza_nome($2)`,
+			tenantID, autor).Scan(&id)
+		if err == nil {
+			autorID, externo = &id, false
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+	}
+
+	// Hash calculado aqui, não no SQL: o mesmo `$N` servindo como bigint em
+	// `person_id` e como texto dentro de `md5()` faz o Postgres recusar a
+	// consulta inteira com "inconsistent types deduced for parameter".
+	//
+	// A chave é pessoa + data + texto. O autor fica de fora de propósito: o
+	// mesmo feedback aparece no dossiê e em arquivo próprio, um com o nome de
+	// quem assinou e o outro sem, e incluir o autor faria os dois entrarem
+	// como se fossem dois reconhecimentos diferentes.
+	soma := sha256.Sum256(fmt.Appendf(nil, "%d|%s|%s", personID, data, texto))
+
+	res, err := tx.Exec(`
+		INSERT INTO feedbacks
+		  (tenant_id, person_id, direcao, tipo, autor_nome, autor_person_id,
+		   autor_externo, data, titulo, texto, fonte, confidencialidade, hash_dedupe)
+		VALUES ($1,$2,'recebido',$3,NULLIF($4,''),$5,$6,$7::date,NULLIF($8,''),$9,
+		        $10,'publico_liderado',$11)
+		ON CONFLICT (tenant_id, hash_dedupe) DO NOTHING`,
+		tenantID, personID, tipo, autor, autorID, externo, data, titulo, texto,
+		fonte, hex.EncodeToString(soma[:]))
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		rel.Feedbacks++
+	}
+	return nil
+}
+
+// processarFeedbacksAvulsos lê os feedbacks registrados em arquivo próprio.
+//
+// São os que não estavam na TeamGuide na hora do dossiê — elogio escrito na
+// semana, reconhecimento de entrega. Ficavam na pasta da pessoa sem nenhum
+// caminho para o banco, e sumiriam na AVD.
+func processarFeedbacksAvulsos(db *sql.DB, tenantID int64, raiz string,
+	dec decisoes, rel *RelProcessamento) error {
+
+	arquivos, _ := filepath.Glob(filepath.Join(raiz, "*", "Feedback", "*.md"))
+	sort.Strings(arquivos)
+
+	for _, caminho := range arquivos {
+		nome := filepath.Base(caminho)
+
+		if dec.fora[nome] { // ver carregarIgnorados: pular, não só preservar o status
+			continue
+		}
+
+		f, err := os.Open(caminho)
+		if err != nil {
+			rel.Erros = append(rel.Erros, fmt.Sprintf("%s: %v", nome, err))
+			continue
+		}
+		fa, err := ParseFeedbackAvulso(f)
+		f.Close()
+		if err != nil {
+			rel.Erros = append(rel.Erros, fmt.Sprintf("%s: %v", nome, err))
+			marcarArquivo(db, tenantID, nome, "erro", err.Error())
+			continue
+		}
+
+		// O nome do título pode vir abreviado ("Michell"); a pasta pai é a
+		// segunda fonte, e entre as duas uma costuma resolver.
+		pai := filepath.Base(filepath.Dir(filepath.Dir(caminho)))
+		m, quem := dec.pessoaDe(nome), ""
+		if m == nil {
+			m, quem, err = resolverEntreParticipantes(db, tenantID, fa.Pessoa, []string{pai})
+			if err != nil {
+				return err
+			}
+		}
+		if m == nil {
+			rel.Revisao = append(rel.Revisao, fmt.Sprintf("%s: não resolvi %q", nome, fa.Pessoa))
+			marcarRevisaoPessoa(db, tenantID, nome, []string{fa.Pessoa, pai})
+			continue
+		}
+		if m.Como != "exata" && m.Como != "manual" {
+			if err := GravarAlias(db, tenantID, m.PersonID, quem, "feedback"); err == nil {
+				rel.Aliases++
+			}
+		}
+
+		tx, err := db.Begin()
+		if err != nil {
+			return err
+		}
+		err = gravarFeedback(tx, tenantID, m.PersonID, fa.Tipo, fa.Data, "",
+			fa.Titulo, fa.Texto, "arquivo_md", rel)
+		if err != nil {
+			tx.Rollback() //nolint:errcheck // o erro que importa é o de cima
+			rel.Erros = append(rel.Erros, fmt.Sprintf("%s: %v", nome, err))
+			marcarArquivo(db, tenantID, nome, "erro", err.Error())
+			continue
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		marcarArquivo(db, tenantID, nome, "processado", "", m.PersonID)
+	}
+	return nil
+}
+
+// resolverEntreParticipantes descobre de quem é a conversa tentando cada nome
+// do cabeçalho, do mais provável para o menos.
+//
+// Existe porque identificar o liderado como "o participante que não é o
+// coordenador" depende de saber o nome do coordenador, e quando ele não está
+// configurado a comparação não elimina ninguém — sobra pegar o primeiro da
+// lista, que o Tactiq às vezes ordena com o coordenador na frente. O sintoma é
+// traiçoeiro: a carga não quebra, ela atribui a conversa à pessoa errada ou
+// manda para revisão dizendo que não resolveu o nome do próprio coordenador.
+//
+// Tentar os demais nomes conserta isso sem depender de configuração: o
+// coordenador não está na tabela de pessoas, então ele nunca resolve, e o
+// liderado sim. Configurar COORDENADOR_NOME continua valendo — é o que marca
+// as falas dele na transcrição —, mas a carga deixa de depender disso para
+// acertar de quem é a conversa.
+//
+// Devolve também o nome que funcionou, porque é ele, e não o preferido, que
+// deve virar alias.
+func resolverEntreParticipantes(db *sql.DB, tenantID int64, preferido string,
+	todos []string) (*Match, string, error) {
+
+	tentados := map[string]bool{}
+	tentar := func(nome string) (*Match, error) {
+		nome = strings.TrimSpace(nome)
+		if nome == "" || tentados[nome] {
+			return nil, nil
+		}
+		tentados[nome] = true
+		return ResolverPessoa(db, tenantID, nome)
+	}
+
+	if m, err := tentar(preferido); err != nil || m != nil {
+		return m, preferido, err
+	}
+	for _, p := range todos {
+		m, err := tentar(p)
+		if err != nil {
+			return nil, "", err
+		}
+		if m != nil {
+			return m, strings.TrimSpace(p), nil
+		}
+	}
+	return nil, preferido, nil
+}
+
+// decisoes é o que o coordenador já resolveu sobre arquivos específicos, por
+// nome de arquivo.
+//
+// As duas decisões são de natureza diferente e por isso andam juntas: uma tira
+// o arquivo da fila, a outra diz de quem ele é. O que elas têm em comum é
+// serem humanas — a carga não pode desfazê-las na próxima passada.
+type decisoes struct {
+	fora   map[string]bool  // tirados da fila
+	pessoa map[string]int64 // de quem é, quando a carga não soube dizer
+}
+
+// carregarDecisoes lê as duas de uma vez.
 //
 // Carregado uma vez por passada e consultado em memória: são 121 arquivos e
 // uma consulta por arquivo seria 121 idas ao banco para responder sempre a
 // mesma pergunta.
+func carregarDecisoes(db *sql.DB, tenantID int64) decisoes {
+	return decisoes{
+		fora:   carregarIgnorados(db, tenantID),
+		pessoa: carregarAtribuicoes(db, tenantID),
+	}
+}
+
+// pessoaDe devolve a pessoa que o coordenador apontou para este arquivo.
+//
+// Vem antes de qualquer heurística: quem leu o arquivo e decidiu foi uma
+// pessoa, e nenhuma similaridade de nome tem autoridade para discordar.
+func (d decisoes) pessoaDe(arquivo string) *Match {
+	if id, ok := d.pessoa[arquivo]; ok {
+		return &Match{PersonID: id, Como: "manual"}
+	}
+	return nil
+}
+
+// carregarAtribuicoes lê os arquivos cuja pessoa foi apontada à mão.
+//
+// Quando a carga não consegue dizer de quem é a conversa, ela para e pede.
+// Esta é a resposta: o coordenador abriu a tela, escolheu a pessoa, e essa
+// escolha vale mais que qualquer heurística — inclusive na próxima passada,
+// que senão mandaria o arquivo de volta para revisão e apagaria a decisão.
+func carregarAtribuicoes(db *sql.DB, tenantID int64) map[string]int64 {
+	atrib := map[string]int64{}
+	linhas, err := db.Query(`
+		SELECT nome_arquivo, person_id FROM source_files
+		 WHERE tenant_id = $1 AND person_id IS NOT NULL AND pessoa_manual`, tenantID)
+	if err != nil {
+		return atrib
+	}
+	defer linhas.Close()
+	for linhas.Next() {
+		var nome string
+		var id int64
+		if linhas.Scan(&nome, &id) == nil {
+			atrib[nome] = id
+		}
+	}
+	return atrib
+}
+
+// carregarIgnorados lê quem o coordenador tirou da fila.
 //
 // Pular de fato, e não só preservar o status, importa: um arquivo ignorado que
 // resolvesse pessoa e data criaria reunião e fonte no banco mesmo marcado como

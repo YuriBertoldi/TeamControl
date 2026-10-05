@@ -443,3 +443,41 @@ func marcarStatusArquivo(ctx context.Context, db *sql.DB, tenantID, id int64, st
 	}
 	return nil
 }
+
+// atribuirPessoa registra de quem é o arquivo quando a carga não soube dizer.
+//
+// Era a metade que faltava da revisão manual: a tela sabia dizer "não
+// identifiquei de quem é" e não oferecia nenhuma saída — o arquivo ficava ali,
+// acusando um problema que não dava para resolver em lugar nenhum.
+//
+// A escolha é gravada no ARQUIVO, não como apelido do nome. A diferença
+// importa: "este arquivo é da Fulana" é um fato que quem leu o arquivo
+// verificou; "toda vez que aparecer este nome é a Fulana" é uma regra geral,
+// que o coordenador não foi perguntado se queria criar. A carga respeita a
+// escolha por cima de qualquer heurística, inclusive nas próximas passadas.
+//
+// Volta para `pendente` de propósito: o arquivo precisa ser lido de novo para
+// virar conteúdo. Quem clica resolve a pendência de identificação, e a próxima
+// varredura faz o resto.
+// A pessoa vem por slug e não por id porque é assim que o front a identifica
+// em todas as telas; expor o id só aqui criaria uma segunda identidade para a
+// mesma coisa, e seria a única rota que depende dela.
+func atribuirPessoa(ctx context.Context, db *sql.DB, tenantID, id int64, slug string) error {
+	res, err := db.ExecContext(ctx, `
+		UPDATE source_files sf
+		   SET person_id = p.id, pessoa_manual = TRUE,
+		       status = 'pendente', erro = NULL, motivo_revisao = NULL
+		  FROM people p
+		 WHERE sf.tenant_id = $1 AND sf.id = $2
+		   AND p.tenant_id = $1 AND p.slug = $3`, tenantID, id, slug)
+	if err != nil {
+		return fmt.Errorf("atribuir pessoa ao arquivo %d: %w", id, err)
+	}
+	// Zero linhas aqui é ambíguo entre arquivo inexistente e slug que não
+	// existe — e as duas são o mesmo erro para quem chama: não deu para ligar
+	// um ao outro.
+	if n, _ := res.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}

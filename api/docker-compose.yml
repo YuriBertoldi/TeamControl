@@ -27,6 +27,10 @@ services:
     environment:
       DATABASE_URL: postgres://teamcontrol:teamcontrol@db:5432/teamcontrol?sslmode=disable
       COORDENADOR_EMAIL: coordenacao@exemplo.com
+      # Sai do .env, que não é versionado: é o seu nome real, como o Tactiq o
+      # escreve. Em branco a carga ainda acerta de quem é a conversa, mas as
+      # falas do coordenador não ficam marcadas na transcrição.
+      COORDENADOR_NOME: "${COORDENADOR_NOME:-}"
       # O caminho DO HOST, só para a tela mostrar onde a varredura acontece.
       # Dentro do container ele é /data/registros, que não diz nada a quem lê.
       PASTA_REGISTROS_HOST: "${PASTA_REGISTROS:-}"

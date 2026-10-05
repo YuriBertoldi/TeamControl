@@ -102,7 +102,43 @@ func ResolverPessoa(db *sql.DB, tenantID int64, nomeBruto string) (*Match, error
 		}
 	}
 
-	// 4. similaridade. Só aceita match ÚNICO acima do limiar: se dois nomes
+	// 4. só o primeiro nome, e apenas quando ele identifica UMA pessoa.
+	//
+	// Pasta e título de feedback são escritos à mão, no tratamento do dia a
+	// dia: "Michell", não "Michell Ailton Riciere de Oliveira". Um token só
+	// não chega ao limiar de similaridade contra um nome completo, então sem
+	// este degrau o arquivo ia para revisão manual por um apelido que, na
+	// prática, não é ambíguo nenhum.
+	//
+	// A trava é a contagem: dois "Rodrigo" no time derrubam o match e a
+	// decisão volta a ser humana. O risco de pendurar feedback na pessoa
+	// errada não vale o ganho de adivinhar.
+	if len(strings.Fields(nome)) == 1 {
+		var n int
+		if err := db.QueryRow(`
+			SELECT count(*) FROM people
+			 WHERE tenant_id = $1
+			   AND split_part(nome_normalizado, ' ', 1) = normaliza_nome($2)`,
+			tenantID, nome).Scan(&n); err != nil {
+			return nil, fmt.Errorf("contar primeiro nome %q: %w", nome, err)
+		}
+		if n == 1 {
+			err = db.QueryRow(`
+				SELECT id, slug FROM people
+				 WHERE tenant_id = $1
+				   AND split_part(nome_normalizado, ' ', 1) = normaliza_nome($2)`,
+				tenantID, nome).Scan(&m.PersonID, &m.Slug)
+			if err == nil {
+				m.Como = "primeiro_nome"
+				return &m, nil
+			}
+			if err != sql.ErrNoRows {
+				return nil, fmt.Errorf("match por primeiro nome de %q: %w", nome, err)
+			}
+		}
+	}
+
+	// 5. similaridade. Só aceita match ÚNICO acima do limiar: se dois nomes
 	// empatam, a decisão é humana.
 	rows, err := db.Query(`
 		SELECT id, slug, similarity(nome_normalizado, normaliza_nome($2)) s

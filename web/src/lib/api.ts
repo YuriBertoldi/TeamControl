@@ -112,6 +112,22 @@ export const api = {
     }),
 
   /**
+   * Aponta de quem é o arquivo quando a carga não soube dizer.
+   *
+   * Por slug, e não por id: é assim que a pessoa é identificada em todas as
+   * telas, e um id numérico só aqui criaria uma segunda identidade para a
+   * mesma coisa.
+   *
+   * A decisão vale para ESTE arquivo, não vira regra para o nome. "Este
+   * arquivo é da Fulana" é um fato que quem abriu o arquivo verificou; "sempre
+   * que aparecer este nome é a Fulana" é uma regra geral que ninguém pediu.
+   */
+  atribuirPessoa: (id: number, pessoa: string) =>
+    requisitar<{ ok: boolean }>(`/api/importacoes/${id}`, {
+      method: 'PUT', body: JSON.stringify({ pessoa }),
+    }),
+
+  /**
    * Varre a pasta e processa o que achar.
    *
    * Timeout largo: a passada completa lê 121 arquivos, extrai 15 PDFs e grava

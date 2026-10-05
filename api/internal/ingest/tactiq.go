@@ -45,6 +45,16 @@ type Transcricao struct {
 	DuracaoMin   int
 	URLOriginal  string
 
+	// Participantes é a lista crua do cabeçalho, na ordem em que o Tactiq
+	// escreveu, e existe porque `Participante` sozinho mente quando o nome do
+	// coordenador não está configurado: sem ter com quem comparar, sobra pegar
+	// o primeiro da lista, e o Tactiq às vezes põe o coordenador primeiro.
+	//
+	// Guardar a lista inteira deixa quem chama tentar o segundo nome quando o
+	// primeiro não resolve, e assim a carga para de depender de uma variável de
+	// ambiente estar preenchida para acertar de quem é a conversa.
+	Participantes []string
+
 	// TextoCanonico é a concatenação normalizada "MM:SS Falante: fala\n".
 	// Os offsets das evidências apontam para ELE, nunca para o arquivo bruto —
 	// é o que impede CRLF e BOM de deslocarem citação.
@@ -84,9 +94,12 @@ func ParseTactiq(r io.Reader, nomeCoordenador string) (*Transcricao, error) {
 		if m := rePart.FindStringSubmatch(linha); m != nil {
 			for _, p := range strings.Split(m[1], ",") {
 				p = strings.TrimSpace(p)
-				if p != "" && normaliza(p) != coordNorm {
+				if p == "" {
+					continue
+				}
+				t.Participantes = append(t.Participantes, p)
+				if t.Participante == "" && normaliza(p) != coordNorm {
 					t.Participante = p // melhor fonte do nome: melhor que o arquivo
-					break
 				}
 			}
 			continue

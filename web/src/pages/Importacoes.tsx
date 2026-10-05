@@ -27,7 +27,7 @@ import { Check, EyeOff, Play, RefreshCw } from 'lucide-react';
 
 import { Page, Filtros, Metrica } from '../app/ui';
 import { ListaDetalhe, Detalhe, Bloco, type LinhaEnxuta } from '../app/ListaDetalhe';
-import { dataBR } from '../data/mock';
+import { dataBR, PESSOAS, souMeus } from '../data/mock';
 import { carregarConfig } from '../config';
 import { api } from '../lib/api';
 import { escreverJSON } from '../data/armazenamento';
@@ -67,6 +67,9 @@ export default function Importacoes() {
   // continuaria mostrando o mesmo, dando a impressão de botão quebrado.
   const [lista, setLista] = useState<ArquivoFonte[]>(ARQUIVOS);
   const [ocupado, setOcupado] = useState(false);
+  // Escolha por arquivo: o painel de detalhe troca de arquivo sem desmontar, e
+  // um estado único faria a seleção de um vazar para o seguinte.
+  const [escolha, setEscolha] = useState<Record<number, string>>({});
   const [aviso, setAviso] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
 
   /** Recarrega do banco e atualiza o cache, para a próxima subida já vir certa. */
@@ -91,6 +94,28 @@ export default function Importacoes() {
       // O erro chega à tela em vez de sumir no console: sem isto o botão
       // pareceria não fazer nada, que é exatamente o sintoma relatado.
       setAviso({ tipo: 'error', texto: `Não consegui alterar: ${(e as Error).message}` });
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  /**
+   * Aponta de quem é o arquivo quando a carga não soube dizer.
+   *
+   * Era a metade que faltava da revisão manual: a tela sabia dizer "não
+   * identifiquei de quem é" e não oferecia saída nenhuma. O arquivo ficava ali
+   * acusando um problema que não dava para resolver em lugar nenhum.
+   */
+  const atribuir = async (a: ArquivoFonte, slug: string, nome: string) => {
+    setOcupado(true);
+    setAviso(null);
+    try {
+      await api.atribuirPessoa(a.id, slug);
+      await recarregar();
+      setAviso({ tipo: 'success', texto:
+        `"${a.arquivo}" agora é de ${nome}. Use "Varrer agora" para importar o conteúdo.` });
+    } catch (e) {
+      setAviso({ tipo: 'error', texto: `Não consegui vincular: ${(e as Error).message}` });
     } finally {
       setOcupado(false);
     }
@@ -247,13 +272,28 @@ export default function Importacoes() {
                         </Bloco>
                       )}
 
-                      {a.candidatos && (
-                        <Bloco rotulo="Vincular a">
+                      {!a.pessoa && a.status !== 'ignorado' && (
+                        <Bloco rotulo="De quem é esta conversa?">
                           <VStack gap={1}>
-                            {a.candidatos.map((c, i) => (
-                              <Button key={c} size="sm" label={c}
-                                      variant={i === 0 ? 'primary' : 'ghost'} />
-                            ))}
+                            <Selector
+                              label="Pessoa"
+                              value={escolha[a.id] ?? ''}
+                              onChange={(v) => setEscolha({ ...escolha, [a.id]: String(v) })}
+                              options={[
+                                { value: '', label: 'Escolha…' },
+                                ...souMeus().map((p) => ({ value: p.slug, label: p.nome })),
+                              ]} />
+                            <Button size="sm" variant="primary" label="Vincular"
+                                    isDisabled={ocupado || !escolha[a.id]}
+                                    onClick={() => {
+                                      const slug = escolha[a.id];
+                                      const p = PESSOAS.find((x) => x.slug === slug);
+                                      if (p) void atribuir(a, p.slug, p.nome);
+                                    }} />
+                            <Text type="supporting">
+                              Vale só para este arquivo. Depois use "Varrer agora" para importar
+                              o conteúdo.
+                            </Text>
                           </VStack>
                         </Bloco>
                       )}

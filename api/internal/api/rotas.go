@@ -173,12 +173,19 @@ func Rotas(db *sql.DB, tenantID, userID int64) http.Handler {
 		}
 		var corpo struct {
 			Status string `json:"status"`
+			Pessoa string `json:"pessoa"` // slug
 		}
 		if err := json.NewDecoder(r.Body).Decode(&corpo); err != nil {
 			erroJSON(w, http.StatusBadRequest, "corpo inválido: "+err.Error())
 			return
 		}
-		err = marcarStatusArquivo(r.Context(), db, tenantID, id, corpo.Status)
+		// Apontar a pessoa é a saída da revisão manual, e por isso vem antes:
+		// quem escolheu a pessoa está dizendo "processe", não "mude o status".
+		if corpo.Pessoa != "" {
+			err = atribuirPessoa(r.Context(), db, tenantID, id, corpo.Pessoa)
+		} else {
+			err = marcarStatusArquivo(r.Context(), db, tenantID, id, corpo.Status)
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			erroJSON(w, http.StatusNotFound, "arquivo não encontrado")
 			return

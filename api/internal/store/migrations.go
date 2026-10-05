@@ -705,4 +705,20 @@ var migrations = []migration{
 		// exatamente o tipo de preenchimento que esvazia o instrumento.
 		`ALTER TABLE avd_calibration_defenses ALTER COLUMN tese DROP NOT NULL`,
 	}},
+
+	{version: 9, name: "pessoa_manual", stmts: []string{
+		// Separa "quem a carga descobriu" de "quem o coordenador decidiu".
+		//
+		// As duas coisas moravam na mesma coluna, e isso impedia as duas de
+		// funcionarem ao mesmo tempo. Se a carga gravasse ali de quem é cada
+		// arquivo — que é o que a tela precisa para parar de dizer "sem pessoa"
+		// em tudo —, a passada seguinte leria a própria resposta anterior como
+		// se fosse decisão humana e nunca mais reconsideraria: um erro de
+		// vínculo ficaria congelado, e corrigir o parser não corrigiria nada.
+		//
+		// Com a marca separada, a carga pode registrar o que descobriu sem
+		// ganhar autoridade sobre si mesma, e a escolha humana continua sendo
+		// a única que a carga não pode desfazer.
+		`ALTER TABLE source_files ADD COLUMN pessoa_manual BOOLEAN NOT NULL DEFAULT FALSE`,
+	}},
 }
