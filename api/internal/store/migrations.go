@@ -721,4 +721,47 @@ var migrations = []migration{
 		// a única que a carga não pode desfazer.
 		`ALTER TABLE source_files ADD COLUMN pessoa_manual BOOLEAN NOT NULL DEFAULT FALSE`,
 	}},
+
+	{version: 10, name: "pauta", stmts: []string{
+		// "Para a próxima conversa" da ata, que era lido e jogado fora.
+		//
+		// É o gatilho de pauta mais barato que existe e o mais honesto: não é
+		// inferência sobre a pessoa, é literalmente o que ficou combinado na
+		// conversa anterior. Sem persistir, toda vez que a 1:1 chega alguém
+		// precisa reler a ata — que é exatamente o trabalho que o sistema
+		// existe para tirar.
+		`CREATE TABLE meeting_next_topics (
+		   id          BIGSERIAL PRIMARY KEY,
+		   tenant_id   BIGINT NOT NULL,
+		   meeting_id  BIGINT NOT NULL,
+		   ordem       SMALLINT NOT NULL,
+		   texto       TEXT NOT NULL,
+		   UNIQUE (tenant_id, meeting_id, ordem),
+		   FOREIGN KEY (meeting_id, tenant_id) REFERENCES meetings(id, tenant_id) ON DELETE CASCADE
+		 )`,
+
+		// Natureza separa "prazo" de "modo de trabalhar".
+		//
+		// 28 dos 161 encaminhamentos dizem "Contínuo", e outros tantos "Sob
+		// demanda" ou "A partir de agora". Nada disso é data: é combinado de
+		// conduta, que não vence. Tratá-los como prazo encheria o board de
+		// vencido falso, e board que grita por engano é board que se aprende a
+		// ignorar — junto com o que gritava com razão.
+		`ALTER TABLE action_items
+		   ADD COLUMN natureza TEXT NOT NULL DEFAULT 'indefinido'
+		   CHECK (natureza IN ('prazo','continuo','indefinido'))`,
+
+		// A data que o sistema PROPÕE, separada da que vale.
+		//
+		// `prazo_date` só é preenchida por decisão humana. A sugestão fica em
+		// coluna própria porque a direção importa: o sistema oferece a leitura
+		// de "Próximas semanas", e quem assume o compromisso confirma. Gravar
+		// direto em `prazo_date` faria o board cobrar uma data que ninguém
+		// combinou — e a primeira vez que isso acontecesse numa 1:1 o
+		// instrumento perderia a confiança de quem o usa.
+		`ALTER TABLE action_items ADD COLUMN prazo_sugerido DATE`,
+		`ALTER TABLE action_items ADD COLUMN prazo_confirmado_em TIMESTAMPTZ`,
+
+		`CREATE INDEX idx_ai_pessoa_status ON action_items (tenant_id, person_id, status)`,
+	}},
 }

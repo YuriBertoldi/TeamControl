@@ -45,8 +45,9 @@ export async function conectar(): Promise<boolean> {
   // cabe aqui porque NÃO traz texto — só contagem e metadado. A transcrição e
   // o markdown vêm por `api.registro(id)` quando a conversa é aberta; as 52
   // fontes somam quase 1 MB e não têm por que viajar na abertura da tela.
-  const [pessoas, tribos, squads, registros, importacoes] = await Promise.all([
+  const [pessoas, tribos, squads, registros, importacoes, compromissos] = await Promise.all([
     api.pessoas(), api.tribos(), api.squads(), api.registros(), api.importacoes(),
+    api.compromissos(),
   ]);
 
   // Só sobrescreve o cache do que a API de fato devolveu. Uma consulta que
@@ -55,6 +56,10 @@ export async function conectar(): Promise<boolean> {
   if (tribos) escreverJSON('tribos', tribos);
   if (registros) escreverJSON('registros', registros);
   if (importacoes) escreverJSON('importacoes', importacoes);
+  // O board de compromissos cabe na subida porque é uma lista de centenas de
+  // linhas curtas, sem texto. A preparação de 1:1, que lê a conversa inteira
+  // de uma pessoa, NÃO entra aqui — ela é buscada quando a tela abre.
+  if (compromissos) escreverJSON('compromissos', compromissos);
 
   // O caminho vai para chave própria, e não para dentro da config: a config só
   // é persistida quando alguém a edita, então gravar nela aqui criaria um

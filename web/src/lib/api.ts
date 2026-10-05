@@ -139,6 +139,34 @@ export const api = {
                  revisao: string[] | null; erros: string[] | null }>(
       '/api/importacoes/varrer', { method: 'POST' }, 120000),
 
+  /* ---------- compromissos e preparação ---------- */
+
+  /** Encaminhamentos em aberto de todo mundo. */
+  compromissos: () => tentar<CompromissoAPI[]>('/api/compromissos'),
+
+  /**
+   * Confirma o prazo ou muda a situação de um compromisso.
+   *
+   * A data que o sistema sugeriu só vira a data que vale passando por aqui.
+   * O sistema lê "próximas semanas" e propõe; quem assumiu o compromisso
+   * confirma. Um board cobrando data que ninguém combinou perde a confiança
+   * de quem o usa na primeira 1:1 em que isso aparecer.
+   */
+  atualizarCompromisso: (id: number, dados: { prazo?: string; status?: string }) =>
+    requisitar<{ ok: boolean }>(`/api/compromissos/${id}`, {
+      method: 'PUT', body: JSON.stringify(dados),
+    }),
+
+  /**
+   * A preparação de uma 1:1, montada do histórico.
+   *
+   * Sob demanda e não na subida: o pacote lê o texto de todas as conversas da
+   * pessoa, e só faz sentido quando a tela de preparação abre. Timeout largo
+   * pelo mesmo motivo.
+   */
+  preparo: (slug: string) =>
+    tentar<PreparoAPI>(`/api/preparo/${encodeURIComponent(slug)}`, 15000),
+
   /* ---------- escrita ---------- */
 
   salvarPessoas: (lista: Pessoa[]) =>
@@ -247,4 +275,74 @@ export interface DetalheRegistroAPI extends RegistroAPI {
   listaOmissoes: OmissaoAPI[];
   perfJustificativa?: string;
   impactoJustificativa?: string;
+}
+
+/* ---------- compromissos e preparação de 1:1 ---------- */
+
+/**
+ * Um encaminhamento em aberto.
+ *
+ * `natureza` separa prazo de conduta: "Contínuo" e "Sob demanda" não vencem,
+ * e colocá-los na fila de vencidos encheria o board de alarme falso — board
+ * que grita por engano é board que se aprende a ignorar junto com o que
+ * gritava com razão.
+ */
+export interface CompromissoAPI {
+  id: number;
+  pessoa: string;
+  pessoaSlug: string;
+  responsavel: 'coordenador' | 'liderado' | 'terceiro' | 'ambos';
+  nomeResp: string;
+  descricao: string;
+  prazoTexto: string;
+  prazoDate: string | null;
+  /** O que o sistema LEU do texto. Vira `prazoDate` só quando confirmado. */
+  prazoSugerido?: string | null;
+  natureza: 'prazo' | 'continuo' | 'indefinido';
+  status: string;
+  origemMeeting: string;
+  /** Em quantas conversas distintas a mesma descrição aparece. */
+  herdado: number;
+  prazoVago: boolean;
+  notaHerdado?: string;
+  /** Prazo é "a próxima 1:1", e a próxima 1:1 é a que está sendo preparada. */
+  venceAgora: boolean;
+}
+
+export interface AssuntoAPI {
+  id: string;
+  prioridade: 'alta' | 'media' | 'baixa' | 'escuta';
+  minutos: number;
+  categoria: string;
+  origem: string;
+  titulo: string;
+  porQueAgora: string;
+  refs: string[];
+  pergunta: string;
+  porQueAssim: string;
+  toca: string[];
+  conf?: number;
+  avisoConf?: string;
+  herdado?: boolean;
+}
+
+export interface PreparoAPI {
+  pessoa: string;
+  slug: string;
+  ultimaConversa: string | null;
+  diasSemConversa: number | null;
+  assuntos: AssuntoAPI[];
+  temas: {
+    recorrentes: { tema: string; ocorrencias: number; janela: number; nota: string; refs: string[] }[];
+    ausentes: { tema: string; conversasSem: number; ultimo: string | null; nota?: string }[];
+  };
+  novidades: { tipo: 'cruzado' | 'entrega' | 'alerta'; data: string; conf: number;
+               texto: string; origem?: string; ref?: string }[];
+  proximaConversa: string[];
+  naoFalar: {
+    cicloVigente: string;
+    itens: { texto: string; conf: number; motivo: string }[];
+    omitidosNivel4: number;
+  };
+  compromissos: CompromissoAPI[];
 }

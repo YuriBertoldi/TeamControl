@@ -11,6 +11,7 @@
  */
 
 import { carregarPessoas, carregarTribos } from './cadastro';
+import { lerJSON } from './armazenamento';
 
 /**
  * A data de hoje, em ISO local.
@@ -117,6 +118,13 @@ export interface Compromisso {
   herdado: number;
   prazoVago?: boolean;
   notaHerdado?: string;
+  /** Onde o sistema LEU o prazo do texto. Vira prazoDate só se confirmado. */
+  prazoSugerido?: string | null;
+  /** prazo · continuo · indefinido. Contínuo não vence. */
+  natureza?: 'prazo' | 'continuo' | 'indefinido';
+  /** O prazo era "a próxima 1:1", e a próxima 1:1 é a que vem. */
+  venceAgora?: boolean;
+  pessoaSlug?: string;
 }
 
 export interface Assunto {
@@ -176,13 +184,17 @@ export const porSlug = (s: string) => PESSOAS.find((p) => p.slug === s);
 export const souMeus = () => PESSOAS.filter((p) => p.status === 'ativo' || p.status === 'afastado');
 
 /**
- * Compromissos assumidos nas conversas.
+ * Compromissos assumidos nas conversas, do cache que `conectar()` preenche.
  *
- * Vazio: o sistema sobe sem dado nenhum. Isto se popula pela importação dos
- * registros ou pela curadoria do pós-1:1, que é onde o prazo textual
- * ("próximas semanas") vira data computável.
+ * Síncrono pelo mesmo motivo de `REGISTROS`: o board, o painel e a preparação
+ * contam e filtram isto em vários lugares, e tornar tudo assíncrono trocaria
+ * um problema por vários estados de carregamento. `main.tsx` garante a ordem.
+ *
+ * `natureza` vem junto e importa: "Contínuo" e "Sob demanda" são combinados de
+ * conduta, não entregas. Não vencem, e misturá-los com o que vence encheria o
+ * board de alarme falso.
  */
-export const COMPROMISSOS: Compromisso[] = [];
+export const COMPROMISSOS: Compromisso[] = lerJSON<Compromisso[]>('compromissos', []);
 
 export const PROXIMA_CONVERSA: Record<string, { dataOrigem: string; itens: string[] }> = {};
 

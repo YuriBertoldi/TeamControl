@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // RelProcessamento é o resumo do que a passada fez.
@@ -102,10 +103,51 @@ func Processar(db *sql.DB, tenantID int64, raiz, coordenador string) (RelProcess
 		return rel, err
 	}
 
+	// "Até a próxima 1:1" é o único prazo textual cuja data existe de verdade,
+	// e o banco a conhece: é a conversa seguinte com a mesma pessoa. Só dá
+	// para resolver depois que todas as reuniões foram carregadas, por isso
+	// aqui e não no laço de encaminhamentos.
+	sugerirPrazoDaProximaConversa(db, tenantID, &rel)
+
 	// Por último: quem sobrou na fila sem nenhum processador o ter tocado
 	// ganha o motivo escrito, para a tela parar de dizer só "na fila".
 	explicarNaoProcessados(db, tenantID)
 	return rel, nil
+}
+
+// sugerirPrazoDaProximaConversa resolve os prazos que apontam para o próximo
+// encontro.
+//
+// Não toca em quem já teve o prazo confirmado por uma pessoa: a sugestão é
+// oferta, e oferta não sobrescreve decisão.
+//
+// Quem sobra sem sugestão não é falha: é o combinado feito na ÚLTIMA conversa
+// de cada pessoa, cuja "próxima 1:1" ainda não aconteceu. Esses vencem na
+// conversa que está sendo preparada, e a pauta os levanta por isso mesmo —
+// ver gatilhoVenceAgora em internal/pauta.
+func sugerirPrazoDaProximaConversa(db *sql.DB, tenantID int64, rel *RelProcessamento) {
+	_, err := db.Exec(`
+		UPDATE action_items a
+		   SET prazo_sugerido = prox.data
+		  FROM meetings origem
+		  JOIN LATERAL (
+		        SELECT m2.data FROM meetings m2
+		         WHERE m2.tenant_id = origem.tenant_id
+		           AND m2.person_id = origem.person_id
+		           AND m2.data > origem.data
+		         ORDER BY m2.data LIMIT 1
+		       ) prox ON TRUE
+		 WHERE a.tenant_id = $1
+		   AND a.meeting_id = origem.id
+		   AND a.natureza = 'prazo'
+		   AND a.prazo_sugerido IS NULL
+		   AND a.prazo_confirmado_em IS NULL
+		   AND a.prazo_texto ~* 'pr[óo]xim[ao]\s+(1[\s:-]*1|conversa|encontro)'`,
+		tenantID)
+	if err != nil {
+		rel.Erros = append(rel.Erros,
+			fmt.Sprintf("sugerir prazo da próxima conversa: %v", err))
+	}
 }
 
 /* ---------- PDFs do Gemini ---------- */
@@ -613,26 +655,63 @@ func gravarRegistro(db *sql.DB, tenantID, personID int64, arquivo string,
 
 	for _, e := range reg.Encaminhamentos {
 		tipo := tipoResponsavel(e.Responsavel)
-		// Prazo textual não vira data inventada. "Próximas semanas" marcado
-		// como vago é o que faz o board conseguir dizer "isto nunca virou
-		// data" — que é a dor real dos encaminhamentos de hoje.
+
+		// Prazo textual não vira data inventada. O que o sistema LÊ do texto
+		// vai para `prazo_sugerido` e `natureza`; `prazo_date` continua vazia
+		// até alguém confirmar. Manter `prazo_vago` é o que faz o board poder
+		// dizer "isto nunca virou data" — a dor real dos encaminhamentos.
+		//
+		// A natureza importa tanto quanto a data: "Contínuo" é combinado de
+		// conduta, não entrega, e colocá-lo na fila de vencidos enche o board
+		// de alarme falso. Ver internal/ingest/prazo.go.
+		leitura := LerPrazo(e.PrazoTexto)
+		sugerida := DataExplicita(e.PrazoTexto, reg.Data)
+		if sugerida == "" && leitura.Dias > 0 {
+			if base, err := time.Parse("2006-01-02", reg.Data); err == nil {
+				sugerida = base.AddDate(0, 0, leitura.Dias).Format("2006-01-02")
+			}
+		}
+
 		_, err := tx.Exec(`
 			INSERT INTO action_items
 			  (tenant_id, person_id, meeting_id, responsavel_tipo, responsavel_nome,
-			   descricao, prazo_texto, prazo_vago, status, confidencialidade, hash_dedupe)
+			   descricao, prazo_texto, prazo_vago, status, confidencialidade,
+			   natureza, prazo_sugerido, hash_dedupe)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE,'aberto','publico_liderado',
-			        md5($8 || $6))
-			ON CONFLICT DO NOTHING`,
+			        $9,NULLIF($10,'')::date,md5($8 || $6))
+			ON CONFLICT (tenant_id, meeting_id, hash_dedupe) DO UPDATE SET
+			  -- Releitura do mesmo arquivo atualiza o que o sistema entendeu,
+			  -- mas nunca toca na data que uma pessoa confirmou.
+			  natureza = EXCLUDED.natureza,
+			  prazo_sugerido = CASE WHEN action_items.prazo_confirmado_em IS NULL
+			                        THEN EXCLUDED.prazo_sugerido
+			                        ELSE action_items.prazo_sugerido END`,
 			// $3 e $8 são o mesmo id. Repetir em vez de reaproveitar porque o
 			// Postgres deduz o tipo do parâmetro pelo uso, e usar o mesmo
 			// $3 como bigint na coluna e como texto dentro de md5() dá
 			// "inconsistent types deduced for parameter".
 			tenantID, personID, meetingID, tipo, e.Responsavel, e.Descricao, e.PrazoTexto,
-			fmt.Sprint(meetingID))
+			fmt.Sprint(meetingID), leitura.Natureza, sugerida)
 		if err != nil {
 			return fmt.Errorf("encaminhamento: %w", err)
 		}
 		rel.Encaminhamentos++
+	}
+
+	// "Para a próxima conversa" era lido e jogado fora. É o gatilho de pauta
+	// mais honesto que existe: não é inferência sobre a pessoa, é o que ficou
+	// combinado na conversa anterior.
+	for i, t := range reg.ProximaConversa {
+		if strings.TrimSpace(t) == "" {
+			continue
+		}
+		if _, err := tx.Exec(`
+			INSERT INTO meeting_next_topics (tenant_id, meeting_id, ordem, texto)
+			VALUES ($1,$2,$3,$4)
+			ON CONFLICT (tenant_id, meeting_id, ordem) DO UPDATE SET texto = EXCLUDED.texto`,
+			tenantID, meetingID, i, strings.TrimSpace(t)); err != nil {
+			return fmt.Errorf("próxima conversa: %w", err)
+		}
 	}
 
 	for _, o := range reg.Omissoes {

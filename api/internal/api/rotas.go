@@ -16,6 +16,7 @@ import (
 
 	"teamcontrol/internal/ingest"
 	"teamcontrol/internal/models"
+	"teamcontrol/internal/pauta"
 )
 
 func Rotas(db *sql.DB, tenantID, userID int64) http.Handler {
@@ -152,6 +153,72 @@ func Rotas(db *sql.DB, tenantID, userID int64) http.Handler {
 			return
 		}
 		escreverJSON(w, d)
+	})
+
+	// Board de compromissos: os encaminhamentos de todo mundo, em aberto.
+	//
+	// Rota global e não por pessoa porque a pergunta que ela responde é "o que
+	// está vencido HOJE", e essa pergunta atravessa o time inteiro — perguntá-la
+	// pessoa a pessoa é exatamente o trabalho que o board existe para evitar.
+	mux.HandleFunc("GET /api/compromissos", func(w http.ResponseWriter, r *http.Request) {
+		lista, err := pauta.CompromissosDe(db, tenantID, 0)
+		if err != nil {
+			log.Printf("listar compromissos: %v", err)
+			erroJSON(w, http.StatusInternalServerError, "falha ao listar compromissos")
+			return
+		}
+		escreverJSON(w, lista)
+	})
+
+	// Confirmar prazo e mudar situação. A data que o sistema sugeriu só vira a
+	// data que vale passando por aqui — ver internal/ingest/prazo.go.
+	mux.HandleFunc("PUT /api/compromissos/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, err := idDaURL(r.URL.Path)
+		if err != nil {
+			erroJSON(w, http.StatusBadRequest, "id inválido")
+			return
+		}
+		var corpo struct {
+			Prazo  string `json:"prazo"`
+			Status string `json:"status"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&corpo); err != nil {
+			erroJSON(w, http.StatusBadRequest, "corpo inválido: "+err.Error())
+			return
+		}
+		err = atualizarCompromisso(r.Context(), db, tenantID, id, corpo.Prazo, corpo.Status)
+		if errors.Is(err, sql.ErrNoRows) {
+			erroJSON(w, http.StatusNotFound, "compromisso não encontrado")
+			return
+		}
+		if err != nil {
+			log.Printf("atualizar compromisso %d: %v", id, err)
+			erroJSON(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		escreverJSON(w, map[string]any{"ok": true})
+	})
+
+	// A preparação de uma 1:1. Sob demanda e por pessoa: é um pacote caro —
+	// lê o texto de todas as conversas dela — e só faz sentido quando a tela
+	// de preparação abre, não na subida do sistema.
+	mux.HandleFunc("GET /api/preparo/{slug}", func(w http.ResponseWriter, r *http.Request) {
+		slug := slugDaURL(r.URL.Path)
+		if slug == "" {
+			erroJSON(w, http.StatusBadRequest, "pessoa não informada")
+			return
+		}
+		p, err := pauta.Montar(db, tenantID, slug, time.Now())
+		if errors.Is(err, sql.ErrNoRows) {
+			erroJSON(w, http.StatusNotFound, "pessoa não encontrada")
+			return
+		}
+		if err != nil {
+			log.Printf("preparo de %s: %v", slug, err)
+			erroJSON(w, http.StatusInternalServerError, "falha ao montar a preparação")
+			return
+		}
+		escreverJSON(w, p)
 	})
 
 	mux.HandleFunc("GET /api/importacoes", func(w http.ResponseWriter, r *http.Request) {

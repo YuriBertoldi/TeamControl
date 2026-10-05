@@ -22,8 +22,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ParteFront é uma das versões escritas da conversa.
@@ -437,6 +439,61 @@ func marcarStatusArquivo(ctx context.Context, db *sql.DB, tenantID, id int64, st
 		 WHERE tenant_id = $1 AND id = $2`, tenantID, id, status)
 	if err != nil {
 		return fmt.Errorf("marcar arquivo %d: %w", id, err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// slugDaURL devolve o último segmento do caminho.
+func slugDaURL(caminho string) string {
+	i := strings.LastIndex(caminho, "/")
+	if i < 0 || i == len(caminho)-1 {
+		return ""
+	}
+	s, err := url.PathUnescape(caminho[i+1:])
+	if err != nil {
+		return ""
+	}
+	return s
+}
+
+// atualizarCompromisso confirma o prazo ou muda a situação.
+//
+// A data só entra por aqui. O que a carga leu do texto fica em
+// `prazo_sugerido`, e `prazo_date` é preenchida quando uma pessoa confirma —
+// `prazo_confirmado_em` registra que houve decisão humana, e é ele que impede
+// a releitura do arquivo de sobrescrever a escolha depois.
+//
+// Concluir grava a data: "concluído quando?" é pergunta que aparece na
+// retrospectiva do ciclo, e sem a data a resposta é "em algum momento".
+func atualizarCompromisso(ctx context.Context, db *sql.DB, tenantID, id int64,
+	prazo, status string) error {
+
+	if status != "" && status != "aberto" && status != "em_andamento" &&
+		status != "concluido" {
+		return fmt.Errorf("situação %q não existe", status)
+	}
+	if prazo != "" {
+		if _, err := time.Parse("2006-01-02", prazo); err != nil {
+			return fmt.Errorf("data %q não é uma data", prazo)
+		}
+	}
+
+	res, err := db.ExecContext(ctx, `
+		UPDATE action_items
+		   SET prazo_date = CASE WHEN $3 <> '' THEN $3::date ELSE prazo_date END,
+		       prazo_vago = CASE WHEN $3 <> '' THEN FALSE ELSE prazo_vago END,
+		       prazo_confirmado_em = CASE WHEN $3 <> '' THEN now()
+		                                  ELSE prazo_confirmado_em END,
+		       status = CASE WHEN $4 <> '' THEN $4 ELSE status END,
+		       concluido_em = CASE WHEN $4 = 'concluido' THEN CURRENT_DATE
+		                           WHEN $4 <> '' THEN NULL
+		                           ELSE concluido_em END
+		 WHERE tenant_id = $1 AND id = $2`, tenantID, id, prazo, status)
+	if err != nil {
+		return fmt.Errorf("atualizar compromisso %d: %w", id, err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return sql.ErrNoRows

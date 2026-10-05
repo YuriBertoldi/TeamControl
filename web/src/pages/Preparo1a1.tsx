@@ -26,6 +26,7 @@ import { TabList, Tab } from '@astryxdesign/core/TabList';
 import { AbaPauta } from './preparo/AbaPauta';
 import { AbaMaterial } from './preparo/AbaMaterial';
 import { primeiroDaFila } from './preparo/constantes';
+import { usePreparo } from '../data/preparo';
 import {
   HOJE, timeDe, COMPROMISSOS, TEMAS, NOVIDADES, DNA, PESSOAS, PAUTA,
   porSlug, montarPauta, diasEntre,
@@ -36,6 +37,11 @@ export default function Preparo1a1() {
   const [aba, setAba] = useState('pauta');
   const [duracao, setDuracao] = useState(45);
   const [descartados, setDescartados] = useState<Set<string>>(new Set());
+
+  // Busca a preparação desta pessoa e enche os Records que as abas leem.
+  // Fica antes do early return de pessoa inexistente porque hook não pode
+  // ficar atrás de condicional.
+  const prep = usePreparo(SLUG);
 
   // O motivo do descarte é o que alimenta a malha de aprendizado do motor:
   // sem motivo registrado, ele não aprende nada.
@@ -83,9 +89,14 @@ export default function Preparo1a1() {
       description: `${x.cargo} · última 1:1 há ${atraso} dias`,
     }));
 
-  const vencidos = COMPROMISSOS.filter(
-    (c) => c.pessoa === SLUG && c.status !== 'concluido'
-        && c.prazoDate && diasEntre(c.prazoDate, HOJE) > 0);
+  // Só conta o que PODE vencer. 'Contínuo' é combinado de conduta e não tem
+  // prazo; contá-lo aqui encheria o aviso de número que não corresponde a
+  // nada, e aviso inflado é aviso que se aprende a ignorar.
+  const dela = COMPROMISSOS.filter(
+    (c) => (c.pessoaSlug ?? c.pessoa) === SLUG && c.status !== 'concluido');
+  const vencidos = dela.filter(
+    (c) => c.natureza !== 'continuo' &&
+           ((c.prazoDate && diasEntre(c.prazoDate, HOJE) > 0) || c.venceAgora));
   const meusVencidos = vencidos.filter((c) => c.responsavel === 'coordenador').length;
 
   return (
@@ -135,15 +146,26 @@ export default function Preparo1a1() {
           </VStack>
         </Card>
 
-        {!temDados && (
+        {/* Três estados distintos, e confundi-los é o que faz a tela mentir.
+            "Carregando" não é "vazio", e "a API não respondeu" não é "esta
+            pessoa não tem histórico" — a segunda mandaria você procurar um
+            problema de dado que não existe. */}
+        {prep.carregando && (
+          <Banner status="info" title="Montando a pauta…"
+                  description="Lendo as conversas desta pessoa para achar o que se repete e o que sumiu." />
+        )}
+        {!prep.carregando && prep.offline && (
+          <Banner status="warning" title="Não consegui falar com o backend"
+                  description="A preparação é montada no servidor a cada abertura, então ela
+                               não tem versão em cache. Suba a API e recarregue." />
+        )}
+        {!prep.carregando && !prep.offline && !temDados && (
           <Banner
             status="info"
-            title="Ainda não há pauta gerada para esta pessoa"
-            /* A mensagem anterior mandava processar as transcricoes em
-               Importacoes. Elas JA estao processadas -- o que falta e o motor
-               de pauta ler o banco, que ainda nao foi ligado. Mandar o usuario
-               fazer algo que ja esta feito e pior que nao dizer nada. */
-            description="O registro e a transcricao desta pessoa ja estao no sistema e podem ser lidos em Registros de 1:1. O que ainda nao existe e o motor que transforma esse historico em assuntos sugeridos."
+            title="Nenhum assunto para esta conversa"
+            description="O motor leu o histórico e não achou compromisso em aberto, tema
+                         recorrente nem tema ausente. Pode ser que as conversas desta
+                         pessoa ainda não tenham sido processadas — confira em Importações."
           />
         )}
 
@@ -156,7 +178,7 @@ export default function Preparo1a1() {
         {aba === 'pauta' && (
           <Banner
             status={meusVencidos > 0 ? 'warning' : 'info'}
-            title={`${vencidos.length} compromissos vencidos${meusVencidos ? `, ${meusVencidos} seu(s)` : ''}`}
+            title={`${vencidos.length} ${vencidos.length === 1 ? 'compromisso vence' : 'compromissos vencem'} nesta conversa${meusVencidos ? `, ${meusVencidos} meu(s)` : ''}`}
             description={`${TEMAS[SLUG]?.ausentes.length ?? 0} temas ausentes · ${NOVIDADES[SLUG]?.length ?? 0} novidades desde a última`}
             endContent={<Button size="sm" variant="ghost" label="Ver material de apoio"
                                 onClick={() => setAba('material')} />}
