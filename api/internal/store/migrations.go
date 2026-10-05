@@ -764,4 +764,161 @@ var migrations = []migration{
 
 		`CREATE INDEX idx_ai_pessoa_status ON action_items (tenant_id, person_id, status)`,
 	}},
+
+	{version: 11, name: "desenvolvimento", stmts: []string{
+		// Skills, PDI, trilha e DNA. As quatro telas existiam e liam de lugar
+		// nenhum — não havia tabela para nada disso.
+
+		// Nível de skill é SÉRIE TEMPORAL, não estado.
+		//
+		// Nunca sofre UPDATE: cada leitura é uma linha nova. A evolução ao
+		// longo do tempo é o produto — "subiu de 2 para 3 em março, com esta
+		// evidência" é o que sustenta uma conversa de carreira. Guardar só o
+		// estado atual descartaria exatamente isso, e descartaria em silêncio.
+		//
+		// `skill_codigo` é texto sem chave estrangeira de propósito: o
+		// catálogo de skills é editável na tela e mora no navegador. Uma FK
+		// para tabela que não existe aqui impediria a avaliação de ser gravada;
+		// guardar o nome junto com o código faz a linha continuar legível mesmo
+		// que a skill seja renomeada ou removida do catálogo depois.
+		`CREATE TABLE person_skill_assessments (
+		   id           BIGSERIAL PRIMARY KEY,
+		   tenant_id    BIGINT NOT NULL,
+		   person_id    BIGINT NOT NULL,
+		   skill_codigo TEXT NOT NULL,
+		   skill_nome   TEXT NOT NULL,
+		   nivel        SMALLINT NOT NULL CHECK (nivel BETWEEN 0 AND 4),
+		   -- Interesse (0–3) é separado da proficiência de propósito: é o
+		   -- conector com o DNA. Proficiência 1 com interesse 3 é um PDI
+		   -- esperando para acontecer; proficiência 1 com interesse 0 numa
+		   -- skill estratégica é uma conversa difícil que precisa acontecer.
+		   interesse    SMALLINT CHECK (interesse BETWEEN 0 AND 3),
+		   origem       TEXT NOT NULL CHECK (origem IN
+		                  ('coordenador','autoavaliacao','llm_extracao','avd','par')),
+		   observacao   TEXT,
+		   avaliado_em  DATE NOT NULL DEFAULT CURRENT_DATE,
+		   criado_em    TIMESTAMPTZ NOT NULL DEFAULT now(),
+		   FOREIGN KEY (person_id, tenant_id) REFERENCES people(id, tenant_id) ON DELETE CASCADE
+		 )`,
+		`CREATE INDEX idx_psa_pessoa ON person_skill_assessments
+		   (tenant_id, person_id, skill_codigo, avaliado_em DESC)`,
+
+		// O estado atual é uma VIEW, e por origem: a leitura do líder e a
+		// autoavaliação coexistem, e é a distância entre elas que vira item
+		// obrigatório de pauta. Colapsar as duas numa nota só apagaria o gap,
+		// que é o dado mais útil da matriz inteira.
+		`CREATE VIEW person_skills_atual AS
+		   SELECT DISTINCT ON (tenant_id, person_id, skill_codigo, origem)
+		          tenant_id, person_id, skill_codigo, skill_nome, nivel,
+		          interesse, origem, observacao, avaliado_em
+		     FROM person_skill_assessments
+		    ORDER BY tenant_id, person_id, skill_codigo, origem,
+		             avaliado_em DESC, id DESC`,
+
+		// PDI. Objetivo sem skill-alvo é recusado pela coluna NOT NULL: é o
+		// que transforma "estudar Go" (incobrável) em "Go/APIs HTTP: 1→3 até
+		// março, evidenciado por PR em produção".
+		`CREATE TABLE pdi_plans (
+		   id           BIGSERIAL PRIMARY KEY,
+		   tenant_id    BIGINT NOT NULL,
+		   person_id    BIGINT NOT NULL,
+		   titulo       TEXT NOT NULL,
+		   skill_codigo TEXT NOT NULL,
+		   skill_nome   TEXT NOT NULL,
+		   nivel_atual  SMALLINT NOT NULL CHECK (nivel_atual BETWEEN 0 AND 4),
+		   nivel_alvo   SMALLINT NOT NULL CHECK (nivel_alvo BETWEEN 0 AND 4),
+		   prazo        DATE,
+		   status       TEXT NOT NULL DEFAULT 'ativo'
+		                CHECK (status IN ('ativo','concluido','abandonado','pausado')),
+		   motivo       TEXT,
+		   criado_em    TIMESTAMPTZ NOT NULL DEFAULT now(),
+		   CHECK (nivel_alvo > nivel_atual),
+		   FOREIGN KEY (person_id, tenant_id) REFERENCES people(id, tenant_id) ON DELETE CASCADE
+		 )`,
+		`CREATE TABLE pdi_milestones (
+		   id           BIGSERIAL PRIMARY KEY,
+		   tenant_id    BIGINT NOT NULL,
+		   plan_id      BIGINT NOT NULL REFERENCES pdi_plans(id) ON DELETE CASCADE,
+		   ordem        SMALLINT NOT NULL,
+		   descricao    TEXT NOT NULL,
+		   prazo        DATE,
+		   concluido_em DATE,
+		   evidencia    TEXT,
+		   UNIQUE (plan_id, ordem)
+		 )`,
+
+		// Trilha QA → Dev. Os níveis e critérios são cadastro, não código:
+		// eles mudam conforme a trilha é calibrada, e recompilar para corrigir
+		// um critério é o tipo de atrito que faz o instrumento ser abandonado.
+		`CREATE TABLE track_levels (
+		   codigo       TEXT PRIMARY KEY,
+		   nome         TEXT NOT NULL,
+		   identidade   TEXT NOT NULL,
+		   ordem        SMALLINT NOT NULL,
+		   -- Nem todo QA vai virar dev, e tudo bem. Trilha com saída única
+		   -- transformaria N2 e N3 em fracasso, quando ambos já resolvem o
+		   -- problema de negócio.
+		   saida_valida TEXT
+		 )`,
+		`CREATE TABLE track_criteria (
+		   id            BIGSERIAL PRIMARY KEY,
+		   level_codigo  TEXT NOT NULL REFERENCES track_levels(codigo) ON DELETE CASCADE,
+		   ordem         SMALLINT NOT NULL,
+		   -- Todo critério tem verbo observável e produz artefato. Nada de
+		   -- "demonstrar maturidade": isso não é verificável, e critério não
+		   -- verificável vira avaliação de simpatia.
+		   descricao     TEXT NOT NULL,
+		   artefato      TEXT,
+		   UNIQUE (level_codigo, ordem)
+		 )`,
+		`CREATE TABLE person_track_progress (
+		   id          BIGSERIAL PRIMARY KEY,
+		   tenant_id   BIGINT NOT NULL,
+		   person_id   BIGINT NOT NULL,
+		   criterio_id BIGINT NOT NULL REFERENCES track_criteria(id) ON DELETE CASCADE,
+		   atendido_em DATE,
+		   evidencia   TEXT,
+		   nota        TEXT,
+		   UNIQUE (tenant_id, person_id, criterio_id),
+		   FOREIGN KEY (person_id, tenant_id) REFERENCES people(id, tenant_id) ON DELETE CASCADE
+		 )`,
+
+		// DNA motivacional. A camada estável (âncoras de Schein) e a volátil
+		// (motivadores) em tabelas separadas porque mudam em ritmos
+		// diferentes, e o delta da volátil entre duas leituras é o sinal de
+		// retenção mais honesto que existe.
+		`CREATE TABLE motivation_profiles (
+		   id                 BIGSERIAL PRIMARY KEY,
+		   tenant_id          BIGINT NOT NULL,
+		   person_id          BIGINT NOT NULL,
+		   ancora_primaria    TEXT,
+		   ancora_secundaria  TEXT,
+		   -- "O que eu NÃO quero" previne mais erro de alocação que saber o
+		   -- que a pessoa quer.
+		   ancora_rejeitada   TEXT,
+		   aspiracao          TEXT,
+		   pref_feedback      TEXT,
+		   pref_reconhecimento TEXT,
+		   origem             TEXT NOT NULL DEFAULT 'coordenador'
+		                      CHECK (origem IN ('coordenador','autodeclarado','planilha','llm_extracao')),
+		   atualizado_em      DATE NOT NULL DEFAULT CURRENT_DATE,
+		   UNIQUE (tenant_id, person_id),
+		   FOREIGN KEY (person_id, tenant_id) REFERENCES people(id, tenant_id) ON DELETE CASCADE
+		 )`,
+		`CREATE TABLE motivation_signals (
+		   id          BIGSERIAL PRIMARY KEY,
+		   tenant_id   BIGINT NOT NULL,
+		   person_id   BIGINT NOT NULL,
+		   motivador   TEXT NOT NULL,
+		   posicao     SMALLINT,
+		   -- A distância entre "Maestria é meu top 1" e "e não está sendo
+		   -- atendido" é a definição operacional de risco de saída, declarada
+		   -- pela própria pessoa, sem modelo preditivo nenhum.
+		   atendimento TEXT CHECK (atendimento IN ('atendido','parcial','nao')),
+		   origem      TEXT NOT NULL DEFAULT 'coordenador',
+		   lido_em     DATE NOT NULL DEFAULT CURRENT_DATE,
+		   FOREIGN KEY (person_id, tenant_id) REFERENCES people(id, tenant_id) ON DELETE CASCADE
+		 )`,
+		`CREATE INDEX idx_ms_pessoa ON motivation_signals (tenant_id, person_id, lido_em DESC)`,
+	}},
 }

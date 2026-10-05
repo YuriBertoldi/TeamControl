@@ -102,6 +102,11 @@ func Processar(db *sql.DB, tenantID int64, raiz, coordenador string) (RelProcess
 	if err := processarAVD(db, tenantID, raiz, dec, &rel); err != nil {
 		return rel, err
 	}
+	// Depois do AVD: o export da TeamGuide enriquece o ciclo que os rascunhos
+	// criaram, e precisa dos drivers já gravados para pendurar as notas.
+	if err := processarTeamGuide(db, tenantID, raiz, dec, &rel); err != nil {
+		return rel, fmt.Errorf("teamguide: %w", err)
+	}
 
 	// "Até a próxima 1:1" é o único prazo textual cuja data existe de verdade,
 	// e o banco a conhece: é a conversa seguinte com a mesma pessoa. Só dá
