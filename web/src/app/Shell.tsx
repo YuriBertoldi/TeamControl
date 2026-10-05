@@ -19,6 +19,7 @@ import {
   LayoutDashboard, Network, UserRound, MessagesSquare, ListChecks,
   Grid3x3, Target, Route, ClipboardCheck, Scale, Siren, FileText,
   Compass, FolderInput, BookUser, CalendarRange, NotebookPen, HeartHandshake, Settings,
+  ClipboardList,
 } from 'lucide-react';
 
 import { ARQUIVOS, ALERTAS } from '../data/mockOps';
@@ -50,6 +51,7 @@ const Relatorios = lazy(() => import('../pages/Relatorios'));
 const EvolucaoLider = lazy(() => import('../pages/EvolucaoLider'));
 const Importacoes = lazy(() => import('../pages/Importacoes'));
 const Cadastros = lazy(() => import('../pages/Cadastros'));
+const Lancamentos = lazy(() => import('../pages/cadastro/Lancamentos'));
 const PessoaPerfil = lazy(() => import('../pages/PessoaPerfil'));
 const Configuracoes = lazy(() => import('../pages/Configuracoes'));
 
@@ -58,7 +60,7 @@ export type RotaId =
   | 'dna' | 'skills' | 'pdi' | 'trilha'  /* 'pdi' segue no tipo: a rota volta sem migração */
   | 'avd' | 'ciclos' | 'calibragem' | 'radar' | 'relatorios'
   | 'evolucao'
-  | 'importacoes' | 'cadastros' | 'config';
+  | 'importacoes' | 'cadastros' | 'lancamentos' | 'config';
 
 type Grupo = 'Dia a dia' | 'Desenvolvimento' | 'Ciclo' | 'Você' | 'Operação';
 
@@ -148,6 +150,8 @@ export default function Shell() {
       badge: naFila, render: () => <Importacoes /> },
     { id: 'cadastros', label: 'Cadastros', grupo: 'Operação', icone: BookUser,
       render: () => <Cadastros /> },
+    { id: 'lancamentos', label: 'Lançamentos', grupo: 'Operação', icone: ClipboardList,
+      render: () => <Lancamentos /> },
     { id: 'config', label: 'Configurações', grupo: 'Operação', icone: Settings,
       render: () => <Configuracoes /> },
   ];
@@ -227,6 +231,7 @@ const PRECARGA: Partial<Record<RotaId, () => Promise<unknown>>> = {
   evolucao: () => import('../pages/EvolucaoLider'),
   importacoes: () => import('../pages/Importacoes'),
   cadastros: () => import('../pages/Cadastros'),
+  lancamentos: () => import('../pages/cadastro/Lancamentos'),
   config: () => import('../pages/Configuracoes'),
 };
 

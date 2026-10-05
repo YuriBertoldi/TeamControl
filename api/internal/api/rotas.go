@@ -221,6 +221,96 @@ func Rotas(db *sql.DB, tenantID, userID int64) http.Handler {
 		escreverJSON(w, p)
 	})
 
+	/* ---------- desenvolvimento: skills, PDI, trilha ---------- */
+
+	mux.HandleFunc("GET /api/skills", func(w http.ResponseWriter, r *http.Request) {
+		lista, err := listarSkills(r.Context(), db, tenantID)
+		if err != nil {
+			log.Printf("listar skills: %v", err)
+			erroJSON(w, http.StatusInternalServerError, "falha ao listar skills")
+			return
+		}
+		escreverJSON(w, lista)
+	})
+
+	// POST e não PUT: cada lançamento ACRESCENTA uma leitura, nunca substitui
+	// a lista. Nível de skill é série temporal — ver desenvolvimento.go.
+	mux.HandleFunc("POST /api/skills", func(w http.ResponseWriter, r *http.Request) {
+		var lote []AvaliacaoSkill
+		if err := json.NewDecoder(r.Body).Decode(&lote); err != nil {
+			erroJSON(w, http.StatusBadRequest, "corpo inválido: "+err.Error())
+			return
+		}
+		res, err := salvarSkills(r.Context(), db, tenantID, lote)
+		if err != nil {
+			log.Printf("salvar skills: %v", err)
+			erroJSON(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		escreverJSON(w, res)
+	})
+
+	mux.HandleFunc("GET /api/pdi", func(w http.ResponseWriter, r *http.Request) {
+		lista, err := listarPDI(r.Context(), db, tenantID)
+		if err != nil {
+			log.Printf("listar PDI: %v", err)
+			erroJSON(w, http.StatusInternalServerError, "falha ao listar PDI")
+			return
+		}
+		escreverJSON(w, lista)
+	})
+
+	mux.HandleFunc("POST /api/pdi", func(w http.ResponseWriter, r *http.Request) {
+		var pl PlanoPDI
+		if err := json.NewDecoder(r.Body).Decode(&pl); err != nil {
+			erroJSON(w, http.StatusBadRequest, "corpo inválido: "+err.Error())
+			return
+		}
+		id, err := salvarPDI(r.Context(), db, tenantID, pl)
+		if err != nil {
+			// Erro de regra (sem skill-alvo, alvo menor que o atual) é 400 e
+			// vai inteiro para a tela: a mensagem É a orientação.
+			erroJSON(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		escreverJSON(w, map[string]any{"ok": true, "id": id})
+	})
+
+	mux.HandleFunc("GET /api/trilha", func(w http.ResponseWriter, r *http.Request) {
+		t, err := listarTrilha(r.Context(), db, tenantID)
+		if err != nil {
+			log.Printf("listar trilha: %v", err)
+			erroJSON(w, http.StatusInternalServerError, "falha ao listar a trilha")
+			return
+		}
+		escreverJSON(w, t)
+	})
+
+	mux.HandleFunc("PUT /api/trilha", func(w http.ResponseWriter, r *http.Request) {
+		var c struct {
+			Pessoa     string `json:"pessoa"`
+			CriterioID int64  `json:"criterioId"`
+			AtendidoEm string `json:"atendidoEm"`
+			Evidencia  string `json:"evidencia"`
+			Nota       string `json:"nota"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
+			erroJSON(w, http.StatusBadRequest, "corpo inválido: "+err.Error())
+			return
+		}
+		err := marcarCriterio(r.Context(), db, tenantID, c.Pessoa, c.CriterioID,
+			c.AtendidoEm, c.Evidencia, c.Nota)
+		if errors.Is(err, sql.ErrNoRows) {
+			erroJSON(w, http.StatusNotFound, "pessoa ou critério não encontrado")
+			return
+		}
+		if err != nil {
+			erroJSON(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		escreverJSON(w, map[string]any{"ok": true})
+	})
+
 	mux.HandleFunc("GET /api/importacoes", func(w http.ResponseWriter, r *http.Request) {
 		arquivos, err := listarImportacoesFront(r.Context(), db, tenantID)
 		if err != nil {

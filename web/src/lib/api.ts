@@ -167,6 +167,40 @@ export const api = {
   preparo: (slug: string) =>
     tentar<PreparoAPI>(`/api/preparo/${encodeURIComponent(slug)}`, 15000),
 
+  /* ---------- desenvolvimento ---------- */
+
+  /** Estado atual das skills: uma linha por pessoa × skill × origem. */
+  skills: () => tentar<AvaliacaoSkillAPI[]>('/api/skills'),
+
+  /**
+   * Lança um lote de avaliações de skill.
+   *
+   * POST e não PUT: cada lançamento ACRESCENTA uma leitura à série, nunca
+   * substitui a lista. Lançar hoje o mesmo nível de ontem é informação —
+   * significa "conferi e continua 3", diferente de "ninguém olhou desde março".
+   *
+   * Timeout largo: a matriz cheia do time passa de 400 linhas.
+   */
+  lancarSkills: (lote: AvaliacaoSkillAPI[]) =>
+    requisitar<{ gravadas: number; recusas: string[] | null }>('/api/skills', {
+      method: 'POST', body: JSON.stringify(lote),
+    }, 30000),
+
+  pdi: () => tentar<PlanoPDIAPI[]>('/api/pdi'),
+
+  salvarPDI: (plano: PlanoPDIAPI) =>
+    requisitar<{ ok: boolean; id: number }>('/api/pdi', {
+      method: 'POST', body: JSON.stringify(plano),
+    }),
+
+  trilha: () => tentar<TrilhaAPI>('/api/trilha', 8000),
+
+  marcarCriterio: (d: { pessoa: string; criterioId: number; atendidoEm: string;
+                        evidencia: string; nota?: string }) =>
+    requisitar<{ ok: boolean }>('/api/trilha', {
+      method: 'PUT', body: JSON.stringify(d),
+    }),
+
   /* ---------- escrita ---------- */
 
   salvarPessoas: (lista: Pessoa[]) =>
@@ -345,4 +379,65 @@ export interface PreparoAPI {
     omitidosNivel4: number;
   };
   compromissos: CompromissoAPI[];
+}
+
+/* ---------- desenvolvimento ---------- */
+
+/**
+ * Uma leitura de nível de skill.
+ *
+ * `origem` é o que mantém a leitura do líder e a autoavaliação coexistindo.
+ * Colapsar as duas numa nota só apagaria o gap — que é o dado mais útil da
+ * matriz inteira, e o que a AVD mostrou importar: quem se dá 4 contra 3 do
+ * líder não tem problema de nota, tem problema de alinhamento de expectativa.
+ */
+export interface AvaliacaoSkillAPI {
+  pessoa: string;
+  skill: string;
+  skillNome: string;
+  nivel: number;
+  /** 0–3, separado da proficiência: é o conector com o DNA. */
+  interesse?: number;
+  origem: 'coordenador' | 'autoavaliacao' | 'llm_extracao' | 'avd' | 'par';
+  observacao?: string;
+  avaliadoEm?: string;
+}
+
+export interface MarcoPDIAPI {
+  ordem: number;
+  descricao: string;
+  prazo?: string;
+  concluidoEm?: string;
+  evidencia?: string;
+}
+
+export interface PlanoPDIAPI {
+  id?: number;
+  pessoa: string;
+  titulo: string;
+  /** Obrigatória: é ela que torna o objetivo cobrável. */
+  skill: string;
+  skillNome: string;
+  nivelAtual: number;
+  nivelAlvo: number;
+  prazo?: string;
+  status: string;
+  marcos: MarcoPDIAPI[];
+}
+
+export interface CriterioTrilhaAPI {
+  id: number;
+  nivel: string;
+  ordem: number;
+  descricao: string;
+  artefato?: string;
+  atendidoEm?: string;
+  evidencia?: string;
+  nota?: string;
+}
+
+export interface TrilhaAPI {
+  niveis: { codigo: string; nome: string; identidade: string; ordem: number;
+            saidaValida?: string }[];
+  pessoas: { pessoa: string; criterios: CriterioTrilhaAPI[] }[];
 }

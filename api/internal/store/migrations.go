@@ -921,4 +921,49 @@ var migrations = []migration{
 		 )`,
 		`CREATE INDEX idx_ms_pessoa ON motivation_signals (tenant_id, person_id, lido_em DESC)`,
 	}},
+
+	{version: 12, name: "trilha_qa_dev", stmts: []string{
+		// A trilha QA → Dev, semeada.
+		//
+		// Duas premissas de desenho estão codificadas aqui, não só escritas:
+		//
+		// 1. **Nem todo QA vai virar dev, e tudo bem.** N2 e N3 têm
+		//    `saida_valida` preenchida: quem chega lá já resolveu o problema de
+		//    negócio mesmo que nunca escreva Delphi. Trilha com saída única
+		//    transformaria os dois em fracasso.
+		// 2. **Todo critério tem verbo observável e produz artefato.** Nada de
+		//    "demonstrar maturidade" — isso não é verificável, e critério não
+		//    verificável vira avaliação de simpatia.
+		`INSERT INTO track_levels (codigo, nome, identidade, ordem, saida_valida) VALUES
+		  ('N0','Executor','Executa roteiro definido por outro',0,NULL),
+		  ('N1','Analista de Testes','Modela os próprios cenários e levanta risco',1,NULL),
+		  ('N2','QA Automação','Opera e estende a suíte existente',2,
+		   'Deixou de ser manual — o problema de negócio já está resolvido aqui'),
+		  ('N3','QA Engineer (SDET)','Constrói a ferramenta de teste, não só o teste',3,
+		   'Engenharia de qualidade — carreira própria, não degrau para dev'),
+		  ('N4','Dev Jr. com veia de qualidade','Entrega feature e bug no produto',4,
+		   'Entra na trilha de desenvolvimento')`,
+
+		`INSERT INTO track_criteria (level_codigo, ordem, descricao, artefato) VALUES
+		  ('N1',1,'Modelou os próprios cenários de teste para ao menos 3 demandas, sem roteiro pronto','cenários escritos no card'),
+		  ('N1',2,'Levantou risco não previsto na análise em ao menos 2 demandas','apontamento no card, aceito pelo time'),
+		  ('N1',3,'Escreveu SQL de pós-condição sem apoio','consulta anexada à evidência de teste'),
+		  ('N1',4,'Usou Git sem apoio (branch, commit, push, PR)','histórico do repositório'),
+
+		  ('N2',1,'Executou do zero ao verde ao menos 5 casos no repositório de automação','casos no *-robotframework-e2e'),
+		  ('N2',2,'Teve ao menos 3 PRs mesclados na suíte','PRs no Bitbucket'),
+		  ('N2',3,'Classificou corretamente falha de teste × bug de produto em ao menos 10 ocorrências','triagem registrada'),
+		  ('N2',4,'Manteve a suíte verde por 2 semanas corridas','histórico do pipeline'),
+
+		  ('N3',1,'Escreveu ao menos 3 Mapping.py do zero, aprovados em review','arquivos no repositório'),
+		  ('N3',2,'Criou ao menos 1 helper reutilizado POR OUTRA PESSOA','uso do helper em PR de terceiro'),
+		  ('N3',3,'Manteve a suíte estável por 4 semanas corridas','histórico do pipeline'),
+		  ('N3',4,'Revisou PR de terceiro com apontamento aceito','comentário no PR'),
+		  ('N3',5,'Reduziu tempo ou escopo de uma regressão, com número antes e depois','medição registrada'),
+
+		  ('N4',1,'Entregou ao menos 2 correções de bug no produto, mescladas','PRs no produto'),
+		  ('N4',2,'Entregou ao menos 1 feature pequena de ponta a ponta','card concluído'),
+		  ('N4',3,'Escreveu teste unitário para o próprio código','testes no PR'),
+		  ('N4',4,'Participou de sprint zero ou refinamento com contribuição técnica aceita','ata do refinamento')`,
+	}},
 }
