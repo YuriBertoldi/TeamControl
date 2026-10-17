@@ -45,7 +45,7 @@ export function AbaMaterial({ SLUG }: { SLUG: string }) {
 
       <Card padding={4}>
         <VStack gap={2}>
-          <Heading level={3}>O que ficou com ele</Heading>
+          <Heading level={3}>O que ficou com a pessoa</Heading>
           <List density="compact" hasDividers>
             {dele.map((c) => <CompromissoRow key={c.id} c={c} />)}
           </List>

@@ -113,7 +113,9 @@ func gatilhoPrometido(p *Preparo) []Assunto {
 	}
 	titulo := "Devo uma devolutiva"
 	if len(devo) > 1 {
-		titulo = fmt.Sprintf("Devo %d coisas a ele", len(devo))
+		// Sem pronome: o sistema não guarda o da pessoa, e inferir pelo nome
+		// erraria com quem a tela nomeia minutos antes de você olhar para ela.
+		titulo = fmt.Sprintf("Devo %d coisas", len(devo))
 	}
 	return []Assunto{{
 		ID: "prometi", Prioridade: Alta, Minutos: 5 + 2*len(devo),
@@ -188,7 +190,7 @@ func gatilhoSemData(p *Preparo) []Assunto {
 		Categoria: "Compromisso", Origem: "regra_compromisso",
 		Titulo: plural(n, "combinado nunca virou data", "combinados nunca viraram data"),
 		PorQueAgora: "Prazo escrito como \"próximas semanas\" não vence nunca, " +
-			"e o que não vence não é cobrado — nem por mim, nem por ele.",
+			"e o que não vence não é cobrado — nem por mim, nem pela pessoa.",
 		Refs: unicos(refs),
 		Pergunta: "Tem um punhado de coisas nossas sem data. Vamos pôr data nas " +
 			"três que mais importam e deixar o resto cair?",
@@ -242,8 +244,8 @@ func gatilhoCadencia(p *Preparo, cadenciaDias int) []Assunto {
 			"status report. O que mudou nesse período provavelmente não cabe numa pauta.",
 		Pergunta: "Faz " + fmt.Sprint(d) + " dias que não conversamos direito. " +
 			"O que aconteceu nesse tempo que eu deveria saber e não sei?",
-		PorQueAssim: "A pergunta assume a minha falha de ritmo, não a dele. " +
-			"O intervalo foi decisão minha, não dele.",
+		PorQueAssim: "A pergunta assume a minha falha de ritmo, não a de quem " +
+			"esperou. O intervalo foi decisão minha.",
 		Toca: []string{"Cadência"},
 	}}
 }
@@ -341,7 +343,7 @@ func gatilhoEscuta() Assunto {
 	return Assunto{
 		ID: "escuta", Prioridade: Escuta, Minutos: 10,
 		Categoria: "Escuta", Origem: "garantia",
-		Titulo:      "Espaço aberto — o que ELE trouxer",
+		Titulo:      "Espaço aberto — o que a pessoa trouxer",
 		PorQueAgora: "Reservado antes de a pauta ser preenchida, não com o que sobrou do tempo.",
 		Pergunta:    "O que você queria ter trazido hoje e eu não perguntei?",
 		PorQueAssim: "Pergunta fechada no fim da conversa não abre nada. Esta " +
